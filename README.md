@@ -24,7 +24,7 @@ Needs: Rust (https://rustup.rs) and Microsoft C++ Build Tools / WebView2 (preins
 The portable exe is `src-tauri/target/release/ngh-companion.exe`.
 
 ## Android .apk in the cloud (no Android Studio)
-Push this folder to a GitHub repository. Open Actions → "Android APK" → Run workflow. When it finishes, download `NGH-Companion-apk` from the run's Artifacts and unzip it to get `app-debug.apk`.
+Push this folder to a GitHub repository. Every push to `main` builds the APK and publishes it under Releases as `NGH-Companion.apk` (latest release). You can also run it by hand: Actions → "Android APK" → Run workflow.
 
 ## Android .apk locally (Capacitor 6)
 Needs: Android Studio (with SDK) and JDK 17.
