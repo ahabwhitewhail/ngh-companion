@@ -3,3 +3,8 @@ dist
 dist-single
 android
 src-tauri/target
+desktop/resources
+desktop/bin
+desktop/dist
+desktop/out
+desktop/.tmp

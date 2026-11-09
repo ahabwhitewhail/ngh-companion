@@ -1,0 +1,55 @@
+# Builds both apps: Android (APK) and Windows (portable zip).
+# Every push and pull request is a test build (files under the run's Artifacts).
+# Pushing a version tag such as v0.3.0 also publishes a Release with both files.
+name: Build apps
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request: {}
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - run: npm run build
+
+      - name: Android APK
+        run: |
+          npx cap add android
+          npx cap sync android
+          chmod +x android/gradlew
+          (cd android && ./gradlew assembleDebug)
+          mkdir -p release
+          cp android/app/build/outputs/apk/debug/app-debug.apk release/NGH-Companion.apk
+
+      - name: Windows app
+        run: |
+          ./desktop/build.sh
+          cp desktop/out/NGH-Companion-Windows.zip release/
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: NGH-Companion
+          path: release/
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" release/NGH-Companion.apk release/NGH-Companion-Windows.zip \
+            --title "NGH Companion ${{ github.ref_name }}" \
+            --notes-file CHANGELOG.md \
+            --latest
