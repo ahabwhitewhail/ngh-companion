@@ -84,7 +84,7 @@
     npx cap add android && npx cap sync android
     cd android && ./gradlew assembleDebug
 
-**CI:** `.github/workflows/build.yml` builds both apps on every push and pull request. Pushing a tag like `v0.3.0` publishes a Release with the APK, the Windows zip and the notes from `CHANGELOG.md`.
+**CI:** `.github/workflows/build.yml` builds both apps on every push and pull request. To release, raise `version` in `package.json` and add notes to `CHANGELOG.md`: when that reaches `main`, CI publishes Release `v<version>` with the APK and the Windows zip.
 
 **Code map**
 - `src/rules.ts` — attributes, skills, Whisper Paths, weapons, growth costs (with rulebook page refs)

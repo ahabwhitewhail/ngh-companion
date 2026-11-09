@@ -1,6 +1,7 @@
 # Builds both apps: Android (APK) and Windows (portable zip).
 # Every push and pull request is a test build (files under the run's Artifacts).
-# Pushing a version tag such as v0.3.0 also publishes a Release with both files.
+# When main gets a version in package.json that has no Release yet, the Release
+# (tag v<version>, both files, notes from CHANGELOG.md) is published automatically.
 name: Build apps
 on:
   workflow_dispatch: {}
@@ -44,12 +45,18 @@ jobs:
           name: NGH-Companion
           path: release/
 
-      - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish release for a new version
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" release/NGH-Companion.apk release/NGH-Companion-Windows.zip \
-            --title "NGH Companion ${{ github.ref_name }}" \
-            --notes-file CHANGELOG.md \
-            --latest
+          V="v$(node -p "require('./package.json').version")"
+          if gh release view "$V" >/dev/null 2>&1; then
+            echo "Release $V already exists; nothing to publish."
+          else
+            gh release create "$V" release/NGH-Companion.apk release/NGH-Companion-Windows.zip \
+              --target "$GITHUB_SHA" \
+              --title "NGH Companion $V" \
+              --notes-file CHANGELOG.md \
+              --latest
+          fi
