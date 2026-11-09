@@ -1,0 +1,30 @@
+{
+  "name": "ngh-companion",
+  "version": "0.1.0",
+  "description": "",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:single": "tsc && vite build --mode single",
+    "preview": "vite preview"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0",
+    "@preact/preset-vite": "^2.9.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vite-plugin-singlefile": "^2.0.3"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/core": "^6.2.0",
+    "@fontsource/old-standard-tt": "^5.1.0",
+    "@fontsource/pt-mono": "^5.1.0",
+    "@fontsource/pt-serif": "^5.1.0",
+    "preact": "^10.25.0"
+  },
+  "private": true,
+  "type": "module"
+}

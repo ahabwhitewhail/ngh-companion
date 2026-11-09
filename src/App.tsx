@@ -1,0 +1,292 @@
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
+import { makeT } from './i18n'
+import { ATTRS, CORRUPTION_MAX, NATIONS } from './rules'
+import { blankCharacter, load, normalize, save, status, uid, type AppData, type Character, type Settings } from './store'
+import { Sheet } from './components/Sheet'
+import { AppCtx, useApp } from './components/ui'
+import { DiceView } from './components/Dice'
+import { CardsView } from './components/Cards'
+import { CorruptionOverlay, Tools } from './components/tools'
+import { discardHand, type CorruptionResult } from './deckOps'
+
+type View = { screen: 'roster' | 'dice' | 'cards' } | { screen: 'sheet'; id: string }
+
+const VIEW_KEY = 'ngh-companion.view'
+
+export function App() {
+  const [data, setData] = useState<AppData>(load)
+  const [view, setView] = useState<View>(() => {
+    try { const v = JSON.parse(sessionStorage.getItem(VIEW_KEY) || 'null'); if (v?.screen) return v } catch { /* ignore */ }
+    return { screen: 'roster' }
+  })
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'failed'>('saved')
+  const [panel, setPanel] = useState<null | 'settings' | 'import' | { exportOf: string }>(null)
+  const [toastMsg, setToastMsg] = useState<string | null>(null)
+  const [corr, setCorr] = useState<(CorruptionResult & { who: string }) | null>(null)
+  const toastTimer = useRef<number>()
+  const t = useMemo(() => makeT(data.settings.lang), [data.settings.lang])
+
+  const toast = (msg: string) => {
+    setToastMsg(msg)
+    clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setToastMsg(null), 3200)
+  }
+
+  // Autosave: debounce writes so typing stays smooth.
+  const first = useRef(true)
+  useEffect(() => {
+    if (first.current) { first.current = false; save(data); return }
+    setSaveState('saving')
+    const h = setTimeout(() => setSaveState(save(data) ? 'saved' : 'failed'), 350)
+    return () => clearTimeout(h)
+  }, [data])
+
+  useEffect(() => { try { sessionStorage.setItem(VIEW_KEY, JSON.stringify(view)) } catch { /* ignore */ } }, [view])
+
+  // Apply theme, language and text size to the document.
+  useEffect(() => {
+    const r = document.documentElement
+    if (data.settings.theme === 'system') r.removeAttribute('data-theme')
+    else r.setAttribute('data-theme', data.settings.theme)
+    r.lang = data.settings.lang
+    r.style.fontSize = `${data.settings.textSize}%`
+  }, [data.settings])
+
+  useEffect(() => { window.scrollTo(0, 0) }, [view.screen === 'sheet' ? view.id : view.screen])
+  const setActive = (id: string | null) => setData(d => ({ ...d, activeId: id }))
+  const apply = (f: (d: AppData) => AppData) => setData(f)
+  const openSheet = (id: string) => { setActive(id); setView({ screen: 'sheet', id }) }
+
+  const setSettings = (s: Partial<Settings>) => setData(d => ({ ...d, settings: { ...d.settings, ...s } }))
+  const upsert = (c: Character) => setData(d => ({ ...d, characters: d.characters.map(x => (x.id === c.id ? c : x)) }))
+  const create = () => {
+    const c = blankCharacter(t('defaultGear'))
+    setData(d => ({ ...d, characters: [c, ...d.characters], activeId: c.id }))
+    setView({ screen: 'sheet', id: c.id })
+  }
+  const remove = (id: string) => {
+    setData(d => { const o = discardHand(d, id); return { ...o, characters: o.characters.filter(x => x.id !== id), activeId: o.activeId === id ? null : o.activeId, initiative: o.initiative.filter(e => e.ref !== id) } })
+    setView({ screen: 'roster' })
+  }
+  const duplicate = (c: Character) => {
+    const n: Character = { ...structuredClone(c), id: uid(), example: false, name: `${c.name || t('unnamed')} ${t('copySuffix')}`, hand: [], createdAt: Date.now(), updatedAt: Date.now() }
+    setData(d => ({ ...d, characters: [n, ...d.characters], activeId: n.id }))
+    setView({ screen: 'sheet', id: n.id })
+  }
+
+  const current = view.screen === 'sheet' ? data.characters.find(c => c.id === view.id) : undefined
+  useEffect(() => { if (view.screen === 'sheet' && !current) setView({ screen: 'roster' }) }, [current, view])
+
+  return (
+    <AppCtx.Provider value={{ t, settings: data.settings, toast }}>
+    <Tools.Provider value={{ d: data, apply, setActive, showCorruption: setCorr }}>
+      <header class="bar">
+        <div class="bar-in">
+          {current ? (
+            <button type="button" class="bar-back" onClick={() => setView({ screen: 'roster' })}>← {t('back')}</button>
+          ) : (
+            <div class="brand">
+              <span class="brand-name">{t('appName')}</span>
+              <span class="brand-sub">{t('appSub')}</span>
+            </div>
+          )}
+          {current && <span class="bar-title">{current.name || t('unnamed')}</span>}
+          <div class="bar-right">
+            <span class={`save save-${saveState}`} aria-live="polite">
+              {saveState === 'saving' ? t('saving') : saveState === 'saved' ? t('saved') : '!'}
+            </span>
+            <button type="button" class="btn btn-ghost btn-sm" onClick={() => setPanel('settings')}>{t('settings')}</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="main">
+        {current ? (
+          <Sheet c={current} onChange={upsert} onDelete={() => remove(current.id)}
+            onDuplicate={() => duplicate(current)} onExport={() => setPanel({ exportOf: current.id })}
+            onCards={() => setView({ screen: 'cards' })} />
+        ) : view.screen === 'dice' ? <DiceView /> : view.screen === 'cards' ? <CardsView /> : (
+          <Roster chars={data.characters} onOpen={openSheet} onCreate={create} onImport={() => setPanel('import')} />
+        )}
+      </main>
+
+      <nav class="tabs" aria-label="Sections">
+        <div class="tabs-in">
+          {([['roster', 'tabRoster', '☰'], ['dice', 'tabDice', '⚃'], ['cards', 'tabCards', '♠']] as const).map(([k, l, ic]) => {
+            const on = k === 'roster' ? view.screen === 'roster' || view.screen === 'sheet' : view.screen === k
+            return (
+              <button type="button" class={`tab ${on ? 'on' : ''}`} aria-current={on ? 'page' : undefined}
+                onClick={() => (k === 'roster' && view.screen !== 'roster' && view.screen !== 'sheet' && data.activeId && data.characters.some(c => c.id === data.activeId) ? openSheet(data.activeId) : setView({ screen: k }))}>
+                <span class="tab-ic" aria-hidden="true">{ic}</span>{t(l)}
+              </button>
+            )
+          })}
+        </div>
+      </nav>
+
+      {panel === 'settings' && <SettingsPanel s={data.settings} set={setSettings} onClose={() => setPanel(null)} />}
+      {panel === 'import' && (
+        <ImportPanel onClose={() => setPanel(null)} onImport={c => {
+          const n = { ...c, id: uid(), example: false, hand: [] }
+          setData(d => ({ ...d, characters: [n, ...d.characters], activeId: n.id }))
+          setPanel(null); toast(t('imported')); setView({ screen: 'sheet', id: n.id })
+        }} />
+      )}
+      {panel && typeof panel === 'object' && (
+        <ExportPanel c={data.characters.find(x => x.id === panel.exportOf)!} onClose={() => setPanel(null)} />
+      )}
+
+      {corr && <CorruptionOverlay r={corr} onClose={() => setCorr(null)} />}
+      {toastMsg && <div class="toast" role="status">{toastMsg}</div>}
+    </Tools.Provider>
+    </AppCtx.Provider>
+  )
+}
+
+function Roster({ chars, onOpen, onCreate, onImport }: { chars: Character[]; onOpen: (id: string) => void; onCreate: () => void; onImport: () => void }) {
+  const { t } = useApp()
+  return (
+    <div class="roster">
+      <div class="roster-head">
+        <div>
+          <h1 class="roster-title">{t('roster')}</h1>
+          <p class="lead">{t('rosterLead')}</p>
+        </div>
+        <div class="roster-actions">
+          <button type="button" class="btn btn-primary" onClick={onCreate}>+ {t('newSoldier')}</button>
+          <button type="button" class="btn btn-ghost" onClick={onImport}>{t('importJson')}</button>
+        </div>
+      </div>
+      {chars.length === 0 && <p class="empty">{t('noSoldiers')}</p>}
+      <ul class="cards">
+        {chars.map(c => {
+          const st = status(c)
+          return (
+            <li key={c.id}>
+              <button type="button" class={`card st-${st}`} onClick={() => onOpen(c.id)}>
+                <div class="card-top">
+                  <span class="card-rank">{c.rank}</span>
+                  {c.example && <span class="chip chip-example">{t('example')}</span>}
+                  <span class={`st st-${st}`}>{t(st === 'dead' ? 'statusDead' : st === 'lost' ? 'statusLost' : 'statusActive')}</span>
+                </div>
+                <span class="card-name">{c.name || t('unnamed')}</span>
+                <span class="card-meta">
+                  {[NATIONS.includes(c.nationality as any) ? t(c.nationality) : c.nationality.trim(), c.unit].filter(Boolean).join(' · ') || '—'}
+                </span>
+                <span class="card-attrs">
+                  {ATTRS.map(a => {
+                    const { cur, max } = c.attrs[a]
+                    return (
+                      <span class="ca" key={a}>
+                        <span class="ca-l">{t(a)}</span>
+                        <span class="ca-bar" aria-hidden="true"><i style={{ width: `${(cur / Math.max(max, 1)) * 100}%` }} /></span>
+                        <span class="ca-v">{cur}/{max}</span>
+                      </span>
+                    )
+                  })}
+                </span>
+                <span class="card-foot">
+                  <span>{t('missions')}: {c.missions}</span>
+                  {!c.corruptionHidden && (
+                    <span class="corr-dots sm" aria-label={`${t('corruption')} ${c.corruption}/5`}>
+                      {Array.from({ length: CORRUPTION_MAX }, (_, i) => <i class={i < c.corruption ? 'on' : ''} />)}
+                    </span>
+                  )}
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: preact.ComponentChildren }) {
+  const { t } = useApp()
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [])
+  return (
+    <div class="modal-bg" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div class="modal" role="dialog" aria-modal="true" aria-label={title}>
+        <div class="modal-h">
+          <h2>{title}</h2>
+          <button type="button" class="btn btn-ghost btn-sm" onClick={onClose}>{t('close')}</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function SettingsPanel({ s, set, onClose }: { s: Settings; set: (s: Partial<Settings>) => void; onClose: () => void }) {
+  const { t } = useApp()
+  const seg = <V extends string | number>(id: string, val: V, opts: [V, string][], on: (v: V) => void) => (
+    <div class="seg" role="radiogroup" aria-labelledby={id}>
+      {opts.map(([v, l]) => <button type="button" role="radio" aria-checked={val === v} class={val === v ? 'on' : ''} onClick={() => on(v)}>{l}</button>)}
+    </div>
+  )
+  return (
+    <Modal title={t('settings')} onClose={onClose}>
+      <div class="set-row"><span id="set-lang" class="fld-l">{t('language')}</span>
+        {seg('set-lang', s.lang, [['ru', 'Русский'], ['en', 'English']], v => set({ lang: v }))}</div>
+      <div class="set-row"><span id="set-theme" class="fld-l">{t('theme')}</span>
+        {seg('set-theme', s.theme, [['system', t('themeSystem')], ['light', t('themeLight')], ['dark', t('themeDark')]], v => set({ theme: v }))}</div>
+      <div class="set-row"><span id="set-size" class="fld-l">{t('textSize')}</span>
+        {seg('set-size', s.textSize, [[90, 'A−'], [100, 'A'], [115, 'A+'], [130, 'A++']], v => set({ textSize: v }))}</div>
+      <label class="set-row set-check" for="set-orig">
+        <input id="set-orig" type="checkbox" class="box" checked={s.origTerms} onChange={e => set({ origTerms: (e.target as HTMLInputElement).checked })} />
+        <span><span class="lbl">{t('origTerms')}</span><span class="desc">{t('origTermsHint')}</span></span>
+      </label>
+      <p class="note">{t('dataNote')}</p>
+    </Modal>
+  )
+}
+
+function ExportPanel({ c, onClose }: { c: Character; onClose: () => void }) {
+  const { t, toast } = useApp()
+  const json = JSON.stringify(c, null, 2)
+  const ref = useRef<HTMLTextAreaElement>(null)
+  const [failed, setFailed] = useState(false)
+  const copy = () => {
+    try {
+      navigator.clipboard.writeText(json).then(() => toast(t('copied')), () => { setFailed(true); ref.current?.select() })
+    } catch { setFailed(true); ref.current?.select() }
+  }
+  return (
+    <Modal title={t('exportJson')} onClose={onClose}>
+      <p class="note">{c.name || t('unnamed')}</p>
+      <textarea id="export-json" ref={ref} class="txt mono json" readOnly value={json} rows={10} onFocus={e => (e.target as HTMLTextAreaElement).select()} />
+      {failed && <p class="note note-stamp">{t('copyFailed')}</p>}
+      <div class="modal-actions"><button type="button" class="btn btn-primary" onClick={copy}>{t('exportJson')}</button></div>
+    </Modal>
+  )
+}
+
+function ImportPanel({ onClose, onImport }: { onClose: () => void; onImport: (c: Character) => void }) {
+  const { t } = useApp()
+  const [text, setText] = useState('')
+  const [err, setErr] = useState(false)
+  const tryImport = (raw: string) => {
+    try { const c = normalize(JSON.parse(raw)); if (c) { onImport(c); return } } catch { /* fallthrough */ }
+    setErr(true)
+  }
+  return (
+    <Modal title={t('importJson')} onClose={onClose}>
+      <p class="note">{t('importHint')}</p>
+      <textarea id="import-json" class="txt mono json" rows={8} value={text} onInput={e => { setText((e.target as HTMLTextAreaElement).value); setErr(false) }} />
+      {err && <p class="note note-stamp">{t('importBad')}</p>}
+      <div class="modal-actions">
+        <label class="btn btn-ghost" for="import-file">{t('chooseFile')}
+          <input id="import-file" type="file" accept=".json,application/json" class="sr-only"
+            onChange={async e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) tryImport(await f.text()) }} />
+        </label>
+        <button type="button" class="btn btn-primary" disabled={!text.trim()} onClick={() => tryImport(text)}>{t('importDo')}</button>
+      </div>
+    </Modal>
+  )
+}
+
