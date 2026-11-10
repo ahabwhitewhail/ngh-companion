@@ -1,3 +1,15 @@
+## v0.2.1
+
+**RU**
+- Браузерная версия: https://ahabwhitewhail.github.io/ngh-companion/ — без установки, работает офлайн, ставится на главный экран (в том числе на iPhone).
+- Иконка приложения.
+
+**EN**
+- Browser version: https://ahabwhitewhail.github.io/ngh-companion/ — no install, works offline, can be added to the home screen (iPhone included).
+- App icon.
+
+Downloads: `NGH-Companion.apk` (Android), `NGH-Companion-Windows.zip` (Windows 10/11).
+
 ## v0.2.0
 
 **RU**

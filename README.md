@@ -11,6 +11,17 @@
   <img src="docs/cards-en.jpg" width="250" alt="Рука карт, тёмная тема">
 </p>
 
+## Открыть в браузере
+
+**https://ahabwhitewhail.github.io/ngh-companion/** — работает на телефоне, планшете и компьютере, без установки. После первого открытия работает и без интернета.
+
+Чтобы открывать как приложение, с иконкой на главном экране:
+- **Android (Chrome):** меню ⋮ → «Добавить на главный экран» или «Установить приложение».
+- **iPhone и iPad (Safari):** кнопка «Поделиться» → «На экран „Домой“».
+- **Компьютер (Chrome, Edge):** значок установки в адресной строке.
+
+Данные браузерной версии хранятся в этом браузере на этом устройстве, отдельно от APK и Windows-версии. Переносить солдат между ними можно через «Скопировать JSON» → «Импорт».
+
 ## Скачать
 
 Последняя версия — на странице **[Releases](https://github.com/ahabwhitewhail/ngh-companion/releases/latest)**:
@@ -62,6 +73,8 @@
 
 ## English
 
+**In the browser:** **https://ahabwhitewhail.github.io/ngh-companion/** works on any phone, tablet or computer and keeps working offline after the first visit. Add it to the home screen (Android Chrome: ⋮ → Install app; iPhone Safari: Share → Add to Home Screen; desktop Chrome/Edge: install icon in the address bar). Browser data lives in that browser only.
+
 **Download:** grab `NGH-Companion.apk` (Android 7+) or `NGH-Companion-Windows.zip` (Windows 10/11) from **[Releases](https://github.com/ahabwhitewhail/ngh-companion/releases/latest)**. On Android, allow installing from that source. On Windows, unzip the whole folder and run `NGH-Companion.exe`; if SmartScreen warns, choose *More info → Run anyway*.
 
 **Features**
@@ -77,6 +90,7 @@
     npm install
     npm run dev           # http://localhost:5173
     npm run build         # web build in dist/
+    npm run build:pages   # browser version (PWA) in dist-pages/
     ./desktop/build.sh    # Windows portable zip (Neutralinojs) in desktop/out/
 
 **Android:** needs JDK 17 and the Android SDK.
@@ -84,7 +98,7 @@
     npx cap add android && npx cap sync android
     cd android && ./gradlew assembleDebug
 
-**CI:** `.github/workflows/build.yml` builds both apps on every push and pull request. To release, raise `version` in `package.json` and add notes to `CHANGELOG.md`: when that reaches `main`, CI publishes Release `v<version>` with the APK and the Windows zip.
+**CI:** `.github/workflows/pages.yml` publishes the browser version to GitHub Pages on every push to `main`. `.github/workflows/build.yml` builds both apps on every push and pull request. To release, raise `version` in `package.json` and add notes to `CHANGELOG.md`: when that reaches `main`, CI publishes Release `v<version>` with the APK and the Windows zip.
 
 **Code map**
 - `src/rules.ts` — attributes, skills, Whisper Paths, weapons, growth costs (with rulebook page refs)
