@@ -1,14 +1,22 @@
 import { createContext } from 'preact'
 import { useContext } from 'preact/hooks'
 import { info, SUIT_SYMBOL } from '../cards'
-import { status, type AppData } from '../store'
+import { status, type AppData, type Character } from '../store'
 import type { CorruptionResult } from '../deckOps'
+import type { Op } from '../ops'
+import type { Role } from '../useTable'
 import { useApp } from './ui'
 
 export interface ToolsCtx {
+  /** What the screens show: local data, or the shared table for a player. */
   d: AppData
-  apply: (f: (d: AppData) => AppData) => void
-  showCorruption: (r: CorruptionResult & { who: string }) => void
+  dispatch: (op: Op) => void
+  /** Change a soldier's own fields (bleeding for a Whisper, etc.). */
+  editChar: (id: string, f: (c: Character) => Character) => void
+  canControl: (id: string) => boolean
+  seatIds: string[]
+  role: Role
+  lastCard: string | null
   setActive: (id: string | null) => void
 }
 export const Tools = createContext<ToolsCtx>(null as unknown as ToolsCtx)
@@ -16,14 +24,15 @@ export const useTools = () => useContext(Tools)
 
 export function SoldierPicker({ allowNone, id = 'pick-soldier' }: { allowNone?: boolean; id?: string }) {
   const { t } = useApp()
-  const { d, setActive } = useTools()
-  const value = d.activeId && d.characters.some(c => c.id === d.activeId) ? d.activeId : ''
+  const { d, setActive, canControl } = useTools()
+  const mine = d.characters.filter(c => canControl(c.id))
+  const value = d.activeId && mine.some(c => c.id === d.activeId) ? d.activeId : ''
   return (
     <label class="fld picker" for={id}>
       <span class="fld-l">{t('soldier')}</span>
       <select id={id} value={value} onChange={e => setActive((e.target as HTMLSelectElement).value || null)}>
         {(allowNone || !value) && <option value="">{allowNone ? t('noSoldier') : '—'}</option>}
-        {d.characters.map(c => {
+        {mine.map(c => {
           const st = status(c)
           return <option value={c.id}>{c.name || t('unnamed')}{st !== 'active' ? ` · ${t(st === 'dead' ? 'statusDead' : 'statusLost')}` : ''} · {c.hand.length}/7</option>
         })}

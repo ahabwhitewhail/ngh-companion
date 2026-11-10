@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'preact/hooks'
-import { info, RANKS, SUITS, SUIT_SYMBOL, SUIT_THEME, buildDeck, growthCheck, initiativeValue, shuffle, valueLabel, type GrowthTarget } from '../cards'
-import { corruptionDraw, drawToHand, playFromHand, rebuildDeck, revealTop, shuffleDiscards, where } from '../deckOps'
+import { info, RANKS, SUITS, SUIT_SYMBOL, SUIT_THEME, buildDeck, growthCheck, valueLabel, type GrowthTarget } from '../cards'
+import { where } from '../deckOps'
 import { ATTRS, CREATION, HAND_MAX, SKILLS, SKILL_MAX, pathOf, type AttrKey } from '../rules'
-import { setTracked, status, uid, type AppData, type Character, type InitEntry } from '../store'
+import { diffTracked, setTracked, status, type AppData, type Character } from '../store'
 import { ConfirmButton, Section, Stepper, useApp } from './ui'
 import { CardFace, SoldierPicker, useTools } from './tools'
 
@@ -11,7 +11,7 @@ type Sub = 'hand' | 'deck' | 'init' | 'journey'
 export function CardsView() {
   const { t } = useApp()
   const [sub, setSub] = useState<Sub>('hand')
-  const { d } = useTools()
+  const { d, role } = useTools()
   const tabs: [Sub, string][] = [['hand', 'cHand'], ['deck', 'cDeck'], ['init', 'cInit'], ['journey', 'cJourney']]
   return (
     <div class="tool">
@@ -20,6 +20,7 @@ export function CardsView() {
         <div class="deck-mini" aria-label={t('inDeck')}>
           <span class="deck-stack" aria-hidden="true"><i /><i /><i /></span>
           <span><b>{d.deck.draw.length}</b> {t('inDeck').toLowerCase()} · {d.deck.discard.length} {t('inDiscard').toLowerCase()}</span>
+          {role !== 'solo' && <span class="chip chip-table">{t('tblShared')}</span>}
         </div>
       </div>
       <div class="seg seg-wide" role="tablist">
@@ -36,38 +37,20 @@ export function CardsView() {
 // ---------------- Hand ----------------
 function HandView() {
   const { t, toast } = useApp()
-  const { d, apply, showCorruption } = useTools()
-  const c = d.characters.find(x => x.id === d.activeId) ?? null
+  const { d, dispatch, canControl, role } = useTools()
+  const c = d.characters.find(x => x.id === d.activeId && canControl(x.id)) ?? null
   const [sel, setSel] = useState<string[]>([])
   const [reward, setReward] = useState(2)
   const [mode, setMode] = useState<null | 'heal' | 'growth'>(null)
   useEffect(() => { setSel([]); setMode(null) }, [c?.id])
   useEffect(() => { if (c) setSel(s => s.filter(x => c.hand.includes(x))) }, [c?.hand.join()])
 
-  if (!c) return <div class="tool-cols"><div class="col"><Section id="hand" titleKey="cHand"><SoldierPicker /><p class="note">{t('noSoldiers')}</p></Section></div></div>
+  if (!c) return <div class="tool-cols"><div class="col"><Section id="hand" titleKey="cHand"><SoldierPicker /><p class="note">{t(role === 'host' ? 'tblHostNoHand' : 'noSoldiers')}</p></Section></div></div>
 
-  const draw = (n: number, reason = 'logDraw') => {
-    let blocked = 0, got = 0
-    apply(dd => { const r = drawToHand(dd, c.id, n, reason); blocked = r.blocked; got = r.drawn.length; return r.d })
-    setTimeout(() => { if (blocked) toast(t('handFull', { n: blocked })); else if (!got) toast(t('deckEmpty')) }, 0)
+  const play = (cards: string[], reason: string, sets?: [string, number][], vars?: Record<string, string | number>) => {
+    dispatch({ t: 'play', char: c.id, cards, reason, sets, vars }); setSel([]); setMode(null)
   }
-  const play = (cards: string[], reason: string, extra?: (dd: AppData) => AppData, vars: Record<string, string | number> = {}) => {
-    apply(dd => {
-      const r = playFromHand(dd, c.id, cards, reason, vars)
-      let out = extra ? extra(r.d) : r.d
-      if (r.blackJoker) {
-        const cr = corruptionDraw(out, c.id); out = cr.d
-        setTimeout(() => { toast(t('corrBlackJoker')); showCorruption({ ...cr, who: c.name || t('unnamed') }) }, 0)
-      } else if (r.joker) setTimeout(() => toast(t('logJoker')), 0)
-      return out
-    })
-    setSel([]); setMode(null)
-  }
-  const heal = (a: AttrKey) => play(sel.slice(0, 1), 'logHeal',
-    dd => ({ ...dd, characters: dd.characters.map(x => (x.id === c.id ? setTracked(x, `attr.${a}.cur`, x.attrs[a].cur + 1) : x)) }), { a: t(a) })
-  const corr = () => {
-    apply(dd => { const r = corruptionDraw(dd, c.id); setTimeout(() => showCorruption({ ...r, who: c.name || t('unnamed') }), 0); return r.d })
-  }
+  const heal = (a: AttrKey) => play(sel.slice(0, 1), 'logHeal', [[`attr.${a}.cur`, c.attrs[a].cur + 1]], { a: t(a) })
 
   return (
     <div class="tool-cols">
@@ -79,7 +62,7 @@ function HandView() {
             {c.hand.map(h => (
               <CardFace id={h} selected={sel.includes(h)} onClick={() => setSel(sel.includes(h) ? sel.filter(x => x !== h) : [...sel, h])} />
             ))}
-            {Array.from({ length: HAND_MAX - c.hand.length }, () => <span class="pcard pcard-slot" aria-hidden="true" />)}
+            {Array.from({ length: Math.max(0, HAND_MAX - c.hand.length) }, () => <span class="pcard pcard-slot" aria-hidden="true" />)}
           </div>
           {sel.length > 0 && (
             <div class="sel-bar">
@@ -100,32 +83,32 @@ function HandView() {
               </div>
             </div>
           )}
-          {mode === 'growth' && <Growth c={c} sel={sel} onBuy={(keep, f, labelText) => { play(sel.filter(x => x !== keep), 'logGrowth', dd => ({ ...dd, characters: dd.characters.map(x => (x.id === c.id ? f(x) : x)) })); toast(t('growthDone', { x: labelText })) }} />}
+          {mode === 'growth' && <Growth c={c} sel={sel} onBuy={(keep, next, labelText) => { play(sel.filter(x => x !== keep), 'logGrowth', diffTracked(c, next)); toast(t('growthDone', { x: labelText })) }} />}
         </Section>
       </div>
       <div class="col">
         <Section id="hand-draw" titleKey="drawTitle">
           <div class="after">
-            <button type="button" class="btn btn-primary" disabled={c.hand.length >= HAND_MAX} onClick={() => draw(1)}>{t('draw1')}</button>
-            {c.hand.length === 0 && c.missions === 0 && <button type="button" class="btn btn-ghost" onClick={() => draw(CREATION.startCards)}>{t('deploy')}</button>}
+            <button type="button" class="btn btn-primary" disabled={c.hand.length >= HAND_MAX} onClick={() => dispatch({ t: 'draw', char: c.id, n: 1 })}>{t('draw1')}</button>
+            {c.hand.length === 0 && c.missions === 0 && <button type="button" class="btn btn-ghost" onClick={() => dispatch({ t: 'draw', char: c.id, n: CREATION.startCards })}>{t('deploy')}</button>}
           </div>
           <h3 class="sub">{t('reward')}</h3>
           <div class="manual">
             <Stepper value={reward} min={1} max={7} label={t('reward')} onChange={setReward} />
-            <button type="button" class="btn btn-ghost" disabled={c.hand.length >= HAND_MAX} onClick={() => draw(reward, 'logReward')}>{t('drawN', { n: reward })}</button>
+            <button type="button" class="btn btn-ghost" disabled={c.hand.length >= HAND_MAX} onClick={() => dispatch({ t: 'draw', char: c.id, n: reward, reason: 'logReward' })}>{t('drawN', { n: reward })}</button>
           </div>
           <p class="note">{t('rewardHint')}</p>
         </Section>
         <Section id="hand-corr" titleKey="corruption" class="sect-corr">
           <p class="note">{t('corruptionHint')}</p>
-          <button type="button" class="btn btn-ghost" onClick={corr}>{t('corrDraw')}</button>
+          <button type="button" class="btn btn-ghost" onClick={() => dispatch({ t: 'corruption', char: c.id })}>{t('corrDraw')}</button>
         </Section>
       </div>
     </div>
   )
 }
 
-function Growth({ c, sel, onBuy }: { c: Character; sel: string[]; onBuy: (keep: string | null, f: (c: Character) => Character, label: string) => void }) {
+function Growth({ c, sel, onBuy }: { c: Character; sel: string[]; onBuy: (keep: string | null, next: Character, label: string) => void }) {
   const { t } = useApp()
   const trainedCount = SKILLS.filter(s => c.skills[s.key].trained).length + c.whispers.filter(w => w.path).length
   const extraNext = Math.max(0, trainedCount - CREATION.trainedSkills) + 1
@@ -147,7 +130,7 @@ function Growth({ c, sel, onBuy }: { c: Character; sel: string[]; onBuy: (keep: 
   const chk = growthCheck(sel, o.target)
   const keepCard = chk.keepOne ? (keep && sel.includes(keep) ? keep : sel[sel.length - 1]) : null
 
-  const apply = (x: Character): Character => {
+  const next = (x: Character): Character => {
     const steps = 1 + chk.bonus
     let n = x
     if (o.target.kind === 'attr') {
@@ -182,7 +165,7 @@ function Growth({ c, sel, onBuy }: { c: Character; sel: string[]; onBuy: (keep: 
           <div class="hand-row">{sel.map(h => <CardFace small id={h} selected={h === keepCard} onClick={() => setKeep(h)} />)}</div>
         </div>
       )}
-      <button type="button" class="btn btn-primary" disabled={!chk.ok} onClick={() => onBuy(keepCard, apply, o.label)}>{t('growthApply')}</button>
+      <button type="button" class="btn btn-primary" disabled={!chk.ok} onClick={() => onBuy(keepCard, next(c), o.label)}>{t('growthApply')}</button>
     </div>
   )
 }
@@ -190,14 +173,19 @@ function Growth({ c, sel, onBuy }: { c: Character; sel: string[]; onBuy: (keep: 
 // ---------------- Deck ----------------
 function DeckView() {
   const { t, settings } = useApp()
-  const { d, apply } = useTools()
-  const [last, setLast] = useState<string | null>(null)
+  const { d, dispatch, role, lastCard, canControl } = useTools()
   const [decks, setDecks] = useState<1 | 2>(d.deck.decks)
   const [jokers, setJokers] = useState(d.deck.jokers)
+  const narrator = role !== 'player'
   const inHands = d.characters.reduce((s, c) => s + c.hand.length, 0)
   const all = buildDeck({ decks: d.deck.decks, jokers: d.deck.jokers })
-  const reveal = () => apply(dd => { const r = revealTop(dd); setLast(r.card); return r.d })
   const fmtLog = (e: AppData['deck']['log'][number]) => t(e.text, e.vars)
+  // A player only knows their own hand; other hands look like the deck.
+  const locate = (id: string) => {
+    const w = where(d, id)
+    if (w.kind === 'hand') { const owner = d.characters.find(c => c.hand.includes(id)); if (owner && !canControl(owner.id) && role === 'player') return { kind: 'draw' as const } }
+    return w
+  }
 
   return (
     <div class="tool-cols">
@@ -211,25 +199,31 @@ function DeckView() {
           <div class="deck-bar" aria-hidden="true">
             <i class="seg-draw" style={{ flex: d.deck.draw.length }} /><i class="seg-hand" style={{ flex: inHands }} /><i class="seg-disc" style={{ flex: d.deck.discard.length }} />
           </div>
-          <div class="after">
-            <button type="button" class="btn btn-primary" onClick={reveal}>{t('revealTop')}</button>
-            <ConfirmButton label={t('shuffleDiscards')} confirmLabel={t('confirmDelete')} onConfirm={() => apply(shuffleDiscards)} />
-          </div>
-          <p class="note">{t('shuffleHint')}</p>
-          {last && <div class="last-card"><CardFace id={last} /><p class="note">{info(last).suit ? t(SUIT_THEME[info(last).suit!]) : t('themeJ')}</p></div>}
+          {narrator ? (
+            <>
+              <div class="after">
+                <button type="button" class="btn btn-primary" onClick={() => dispatch({ t: 'reveal' })}>{t('revealTop')}</button>
+                <ConfirmButton label={t('shuffleDiscards')} confirmLabel={t('confirmDelete')} onConfirm={() => dispatch({ t: 'shuffle' })} />
+              </div>
+              <p class="note">{t('shuffleHint')}</p>
+              {lastCard && <div class="last-card"><CardFace id={lastCard} /><p class="note">{info(lastCard).suit ? t(SUIT_THEME[info(lastCard).suit!]) : t('themeJ')}</p></div>}
+            </>
+          ) : <p class="note">{t('tblDeckIsNarrators')}</p>}
         </Section>
-        <Section id="deck-setup" titleKey="deckSetup">
-          <div class="seg" role="radiogroup">
-            <button type="button" role="radio" aria-checked={decks === 1} class={decks === 1 ? 'on' : ''} onClick={() => setDecks(1)}>{t('oneDeck')}</button>
-            <button type="button" role="radio" aria-checked={decks === 2} class={decks === 2 ? 'on' : ''} onClick={() => setDecks(2)}>{t('twoDecks')}</button>
-          </div>
-          <label class="set-check" for="deck-jokers">
-            <input id="deck-jokers" type="checkbox" class="box" checked={jokers} onChange={e => setJokers((e.target as HTMLInputElement).checked)} />
-            <span>{t('withJokers')}</span>
-          </label>
-          <p class="note">{t('rebuildHint')}</p>
-          <ConfirmButton label={t('rebuild')} confirmLabel={t('confirmDelete')} onConfirm={() => apply(dd => rebuildDeck(dd, decks, jokers))} />
-        </Section>
+        {narrator && (
+          <Section id="deck-setup" titleKey="deckSetup">
+            <div class="seg" role="radiogroup">
+              <button type="button" role="radio" aria-checked={decks === 1} class={decks === 1 ? 'on' : ''} onClick={() => setDecks(1)}>{t('oneDeck')}</button>
+              <button type="button" role="radio" aria-checked={decks === 2} class={decks === 2 ? 'on' : ''} onClick={() => setDecks(2)}>{t('twoDecks')}</button>
+            </div>
+            <label class="set-check" for="deck-jokers">
+              <input id="deck-jokers" type="checkbox" class="box" checked={jokers} onChange={e => setJokers((e.target as HTMLInputElement).checked)} />
+              <span>{t('withJokers')}</span>
+            </label>
+            <p class="note">{t('rebuildHint')}</p>
+            <ConfirmButton label={t('rebuild')} confirmLabel={t('confirmDelete')} onConfirm={() => dispatch({ t: 'rebuild', decks, jokers })} />
+          </Section>
+        )}
       </div>
       <div class="col">
         <Section id="deck-map" titleKey="deckMap">
@@ -241,15 +235,15 @@ function DeckView() {
                   <span class={`dmap-suit ${s === 'H' || s === 'D' ? 'red' : ''}`}>{SUIT_SYMBOL[s]}</span>
                   {RANKS.map(r => {
                     const id = `${r}${s}${di ? '~2' : ''}`
-                    const w = where(d, id)
-                    return <span class={`dm dm-${w.kind}`} title={w.who ? `${r}${SUIT_SYMBOL[s]} · ${w.who}` : `${r}${SUIT_SYMBOL[s]}`}>{r}</span>
+                    const w = locate(id)
+                    return <span class={`dm dm-${w.kind}`} title={'who' in w && w.who ? `${r}${SUIT_SYMBOL[s]} · ${w.who}` : `${r}${SUIT_SYMBOL[s]}`}>{r}</span>
                   })}
                 </div>
               ))}
               {d.deck.jokers && (
                 <div class="dmap-row">
                   <span class="dmap-suit">★</span>
-                  {['XR', 'XB'].map(j => { const id = `${j}${di ? '~2' : ''}`; const w = where(d, id); return <span class={`dm dm-wide dm-${w.kind} ${j === 'XR' ? 'red' : ''}`}>{j === 'XR' ? 'Joker ●' : 'Joker ○'}</span> })}
+                  {['XR', 'XB'].map(j => { const id = `${j}${di ? '~2' : ''}`; const w = locate(id); return <span class={`dm dm-wide dm-${w.kind} ${j === 'XR' ? 'red' : ''}`}>{j === 'XR' ? 'Joker ●' : 'Joker ○'}</span> })}
                 </div>
               )}
             </div>
@@ -275,28 +269,13 @@ function DeckView() {
 // ---------------- Initiative ----------------
 function InitiativeView() {
   const { t } = useApp()
-  const { d, apply } = useTools()
+  const { d, dispatch, canControl, seatIds, role } = useTools()
   const [npcName, setNpcName] = useState('')
   const [npcVal, setNpcVal] = useState(6)
+  const narrator = role !== 'player'
   const entries = d.initiative
-  const setEntries = (f: (e: InitEntry[]) => InitEntry[]) => apply(dd => ({ ...dd, initiative: f(dd.initiative) }))
-  const active = d.characters.filter(c => status(c) === 'active')
-
-  const showCard = (c: Character, card: string | null) => setEntries(es => {
-    const rest = es.filter(e => !(e.kind === 'pc' && e.ref === c.id))
-    return card ? [...rest, { id: uid(), kind: 'pc', ref: c.id, name: c.name || t('unnamed'), card, value: initiativeValue(card) }] : rest
-  })
-  const fromDeck = (c: Character) => apply(dd => {
-    const r = revealTop(dd, 'logInit', { who: c.name || '—' })
-    if (!r.card) return r.d
-    const e: InitEntry = { id: uid(), kind: 'pc', ref: c.id, name: c.name || t('unnamed'), card: r.card, value: initiativeValue(r.card) }
-    return { ...r.d, initiative: [...r.d.initiative.filter(x => !(x.kind === 'pc' && x.ref === c.id)), e] }
-  })
-  const addNpc = () => {
-    if (!npcName.trim()) return
-    setEntries(es => [...es, { id: uid(), kind: 'npc', ref: '', name: npcName.trim(), card: null, value: npcVal }])
-    setNpcName('')
-  }
+  const seats = d.characters.filter(c => seatIds.includes(c.id) && status(c) === 'active')
+  const addNpc = () => { if (!npcName.trim()) return; dispatch({ t: 'initNpc', name: npcName.trim(), value: npcVal }); setNpcName('') }
   const order = [...entries].sort((a, b) => b.value - a.value)
   const top = order[0]?.value
   const tied = order.filter(e => e.value === top).length > 1
@@ -307,35 +286,43 @@ function InitiativeView() {
         <Section id="init-pcs" titleKey="cInit">
           <p class="note">{t('initNotDiscarded')}</p>
           <ul class="init-pcs">
-            {active.map(c => {
+            {seats.map(c => {
               const shown = entries.find(e => e.kind === 'pc' && e.ref === c.id)
+              const mine = canControl(c.id)
               return (
                 <li class="init-pc">
                   <div class="init-pc-h"><strong>{c.name || t('unnamed')}</strong><span class="note">{t('handCount', { n: c.hand.length })}</span></div>
-                  <div class="hand-row">
-                    {c.hand.map(h => <CardFace small id={h} selected={shown?.card === h} onClick={() => showCard(c, shown?.card === h ? null : h)} />)}
-                    {c.hand.length === 0 && <button type="button" class="btn btn-ghost btn-sm" onClick={() => fromDeck(c)}>{t('initFromDeck')}</button>}
-                  </div>
-                  {c.hand.length === 0 && <p class="note">{t('initFromDeckHint')}</p>}
+                  {mine ? (
+                    <>
+                      <div class="hand-row">
+                        {c.hand.map(h => <CardFace small id={h} selected={shown?.card === h} onClick={() => dispatch({ t: 'initShow', char: c.id, card: shown?.card === h ? null : h })} />)}
+                        {c.hand.length === 0 && <button type="button" class="btn btn-ghost btn-sm" onClick={() => dispatch({ t: 'initDeck', char: c.id })}>{t('initFromDeck')}</button>}
+                      </div>
+                      {c.hand.length === 0 && <p class="note">{t('initFromDeckHint')}</p>}
+                    </>
+                  ) : <p class="note">{shown ? t('tblShown') : t('tblWaiting')}</p>}
                 </li>
               )
             })}
+            {seats.length === 0 && <p class="note">{t(role === 'host' ? 'tblNobody' : 'noSoldiers')}</p>}
           </ul>
         </Section>
-        <Section id="init-npc" titleKey="initAddNpc">
-          <div class="id-grid">
-            <label class="fld" for="npc-name"><span class="fld-l">{t('initNpcName')}</span>
-              <input id="npc-name" value={npcName} onInput={e => setNpcName((e.target as HTMLInputElement).value)} onKeyDown={e => e.key === 'Enter' && addNpc()} /></label>
-            <label class="fld" for="npc-val"><span class="fld-l">{t('initValue')}</span>
-              <select id="npc-val" value={npcVal} onChange={e => setNpcVal(Number((e.target as HTMLSelectElement).value))}>
-                {Array.from({ length: 13 }, (_, i) => i + 2).map(v => <option value={v}>{valueLabel(v)}</option>)}
-              </select></label>
-            <button type="button" class="btn btn-ghost" disabled={!npcName.trim()} onClick={addNpc}>+ {t('initAddNpc')}</button>
-          </div>
-        </Section>
+        {narrator && (
+          <Section id="init-npc" titleKey="initAddNpc">
+            <div class="id-grid">
+              <label class="fld" for="npc-name"><span class="fld-l">{t('initNpcName')}</span>
+                <input id="npc-name" value={npcName} onInput={e => setNpcName((e.target as HTMLInputElement).value)} onKeyDown={e => e.key === 'Enter' && addNpc()} /></label>
+              <label class="fld" for="npc-val"><span class="fld-l">{t('initValue')}</span>
+                <select id="npc-val" value={npcVal} onChange={e => setNpcVal(Number((e.target as HTMLSelectElement).value))}>
+                  {Array.from({ length: 13 }, (_, i) => i + 2).map(v => <option value={v}>{valueLabel(v)}</option>)}
+                </select></label>
+              <button type="button" class="btn btn-ghost" disabled={!npcName.trim()} onClick={addNpc}>+ {t('initAddNpc')}</button>
+            </div>
+          </Section>
+        )}
       </div>
       <div class="col">
-        <Section id="init-order" titleKey="initTitle" aside={entries.length > 0 && <button type="button" class="btn btn-ghost btn-sm" onClick={() => setEntries(() => [])}>{t('initClear')}</button>}>
+        <Section id="init-order" titleKey="initTitle" aside={narrator && entries.length > 0 && <button type="button" class="btn btn-ghost btn-sm" onClick={() => dispatch({ t: 'initClear' })}>{t('initClear')}</button>}>
           <p class="note">{t('initHint')}</p>
           {order.length === 0 && <p class="note">{t('initEmpty')}</p>}
           <ol class="init-order">
@@ -345,7 +332,10 @@ function InitiativeView() {
                 <span class="io-card">{e.card ? <CardFace small id={e.card} /> : <span class="npc-val">{valueLabel(e.value)}</span>}</span>
                 <span class="io-name">{e.name}{e.kind === 'npc' && <span class="desc">{t('initValue')}</span>}
                   {e.value === top && <span class="io-win">{tied ? t('initTie') : t('initWinner')}</span>}</span>
-                <button type="button" class="x" aria-label={`${t('remove')}: ${e.name}`} onClick={() => setEntries(es => es.filter(x => x.id !== e.id))}>×</button>
+                {(narrator || (e.kind === 'pc' && canControl(e.ref))) && (
+                  <button type="button" class="x" aria-label={`${t('remove')}: ${e.name}`}
+                    onClick={() => dispatch(e.kind === 'pc' ? { t: 'initShow', char: e.ref, card: null } : { t: 'initRemove', id: e.id })}>×</button>
+                )}
               </li>
             ))}
           </ol>
@@ -357,61 +347,23 @@ function InitiativeView() {
 
 // ---------------- Journey ----------------
 function JourneyView() {
-  const { t, toast } = useApp()
-  const { d, apply, showCorruption } = useTools()
+  const { t } = useApp()
+  const { d, dispatch, canControl, seatIds, role } = useTools()
+  const narrator = role !== 'player'
   const j = d.journey
-  const active = d.characters.filter(c => status(c) === 'active')
-  const [picks, setPicks] = useState<Record<string, string[]>>({})
+  const seats = d.characters.filter(c => seatIds.includes(c.id) && status(c) === 'active')
   const [extra, setExtra] = useState(0)
   const [narr, setNarr] = useState(0)
   const [req, setReq] = useState('')
   const [avoid, setAvoid] = useState('')
-  const [blackFrom, setBlackFrom] = useState<string | null>(null)
-
-  const missing = active.filter(c => c.hand.length > 0 && !(picks[c.id]?.length))
-  const deal = () => {
-    if (missing.length) { toast(t('jNeedOne', { who: missing[0].name || t('unnamed') })); return }
-    apply(dd => {
-      let out = dd
-      const pool: { card: string; from: string }[] = []
-      for (const c of active) {
-        const mine = (picks[c.id] ?? []).filter(x => c.hand.includes(x))
-        if (mine.length) {
-          out = { ...out, characters: out.characters.map(x => (x.id === c.id ? { ...x, hand: x.hand.filter(h => !mine.includes(h)) } : x)) }
-          mine.forEach(card => pool.push({ card, from: c.id }))
-        } else {
-          const r = out.deck.draw[0]; if (r) { out = { ...out, deck: { ...out.deck, draw: out.deck.draw.slice(1) } }; pool.push({ card: r, from: '' }) }
-        }
-      }
-      for (let i = 0; i < extra + narr; i++) {
-        const r = out.deck.draw[0]; if (r) { out = { ...out, deck: { ...out.deck, draw: out.deck.draw.slice(1) } }; pool.push({ card: r, from: '' }) }
-      }
-      const shuffled = shuffle(pool)
-      const black = pool.find(p => p.card.startsWith('XB'))
-      setBlackFrom(black ? black.from || 'deck' : null)
-      const dealt = shuffled.map((p, i) => ({ to: i < active.length ? active[i].id : 'narrator', card: p.card, revealed: false }))
-      return { ...out, deck: { ...out.deck, table: [...out.deck.table, ...dealt.map(x => x.card)] }, journey: { req, avoid, dealt } }
-    })
-    setPicks({})
-  }
-  const finish = () => {
-    apply(dd => {
-      if (!dd.journey) return dd
-      const cards = dd.journey.dealt.map(x => x.card)
-      let deck = { ...dd.deck, table: dd.deck.table.filter(x => !cards.includes(x)) }
-      const jokers = cards.filter(x => info(x).joker)
-      deck = { ...deck, discard: [...deck.discard, ...cards.filter(x => !info(x).joker)] }
-      if (jokers.length) deck = { ...deck, draw: shuffle([...deck.draw, ...jokers]) }
-      deck = { ...deck, log: [...deck.log, { t: Date.now(), text: 'logJourney', cards }, ...(jokers.length ? [{ t: Date.now(), text: 'logJoker' }] : [])].slice(-80) }
-      return { ...dd, deck, journey: null }
-    })
-  }
-  const reveal = (i: number) => apply(dd => dd.journey ? { ...dd, journey: { ...dd.journey, dealt: dd.journey.dealt.map((x, k) => (k === i ? { ...x, revealed: !x.revealed } : x)) } } : dd)
+  const [blackDone, setBlackDone] = useState(false)
+  useEffect(() => setBlackDone(false), [j?.dealt.map(x => x.card).join()])
 
   if (j) {
     const nameOf = (id: string) => (id === 'narrator' ? t('jNarratorCard') : d.characters.find(c => c.id === id)?.name || t('unnamed'))
-    const shown = j.dealt.filter(x => x.revealed).map(x => info(x.card))
+    const shown = j.dealt.filter(x => x.revealed && x.card !== '?').map(x => info(x.card))
     const counts = SUITS.map(s => [s, shown.filter(c => c.suit === s).length] as const)
+    const black = narrator && j.dealt.some(x => x.card.startsWith('XB'))
     return (
       <div class="tool-cols">
         <div class="col">
@@ -420,13 +372,17 @@ function JourneyView() {
             <p class="note">{t('jTheme')}</p>
             <ul class="j-dealt">
               {j.dealt.map((x, i) => {
-                const ci = info(x.card)
+                const known = x.card !== '?'
+                const canFlip = narrator || canControl(x.to)
+                const ci = known ? info(x.card) : null
                 return (
                   <li class="jd">
-                    <CardFace id={x.card} faceDown={!x.revealed} onClick={() => reveal(i)} label={x.revealed ? undefined : t('jReveal')} />
+                    {canFlip
+                      ? <CardFace id={known ? x.card : 'XR'} faceDown={!x.revealed} onClick={() => dispatch({ t: 'jReveal', i })} label={x.revealed ? undefined : t('jReveal')} />
+                      : <CardFace id={known ? x.card : 'XR'} faceDown={!x.revealed || !known} />}
                     <div class="jd-txt">
                       <strong>{nameOf(x.to)}</strong>
-                      <span class="note">{x.revealed ? (ci.suit ? t(SUIT_THEME[ci.suit]) : t('themeJ')) : t('jReveal')}</span>
+                      <span class="note">{x.revealed && ci ? (ci.suit ? t(SUIT_THEME[ci.suit]) : t('themeJ')) : canFlip ? t('jReveal') : t('tblWaiting')}</span>
                     </div>
                   </li>
                 )
@@ -437,15 +393,15 @@ function JourneyView() {
         <div class="col">
           <Section id="journey-check" titleKey="jCheck">
             <div class="suit-count">{counts.map(([s, n]) => <span class={s === 'H' || s === 'D' ? 'red' : ''}>{SUIT_SYMBOL[s]} <b>{n}</b></span>)}</div>
-            {blackFrom && (
+            {black && !blackDone && (
               <div class="sub-panel">
                 <p class="note note-stamp">{t('jBlack')}</p>
-                <div class="after">{active.map(c => (
-                  <button type="button" class="btn btn-ghost btn-sm" onClick={() => { apply(dd => { const r = corruptionDraw(dd, c.id); setTimeout(() => showCorruption({ ...r, who: c.name || t('unnamed') }), 0); return r.d }); setBlackFrom(null) }}>{c.name || t('unnamed')}</button>
+                <div class="after">{seats.map(c => (
+                  <button type="button" class="btn btn-ghost btn-sm" onClick={() => { dispatch({ t: 'corruption', char: c.id }); setBlackDone(true) }}>{c.name || t('unnamed')}</button>
                 ))}</div>
               </div>
             )}
-            <button type="button" class="btn btn-primary" onClick={finish}>{t('jFinish')}</button>
+            {narrator ? <button type="button" class="btn btn-primary" onClick={() => dispatch({ t: 'jFinish' })}>{t('jFinish')}</button> : <p class="note">{t('tblJourneyNarrator')}</p>}
           </Section>
         </div>
       </div>
@@ -456,34 +412,42 @@ function JourneyView() {
     <div class="tool-cols">
       <div class="col">
         <Section id="journey" titleKey="jTitle">
-          <div class="id-grid">
-            <label class="fld" for="j-req"><span class="fld-l">{t('jReq')}</span><input id="j-req" value={req} placeholder={t('jReqPh')} onInput={e => setReq((e.target as HTMLInputElement).value)} /></label>
-            <label class="fld" for="j-avoid"><span class="fld-l">{t('jAvoid')}</span><input id="j-avoid" value={avoid} placeholder={t('jAvoidPh')} onInput={e => setAvoid((e.target as HTMLInputElement).value)} /></label>
-          </div>
+          {narrator && (
+            <div class="id-grid">
+              <label class="fld" for="j-req"><span class="fld-l">{t('jReq')}</span><input id="j-req" value={req} placeholder={t('jReqPh')} onInput={e => setReq((e.target as HTMLInputElement).value)} /></label>
+              <label class="fld" for="j-avoid"><span class="fld-l">{t('jAvoid')}</span><input id="j-avoid" value={avoid} placeholder={t('jAvoidPh')} onInput={e => setAvoid((e.target as HTMLInputElement).value)} /></label>
+            </div>
+          )}
           <p class="note">{t('jContribute')}</p>
           <ul class="init-pcs">
-            {active.map(c => (
-              <li class="init-pc">
-                <div class="init-pc-h"><strong>{c.name || t('unnamed')}</strong><span class="note">{t('handCount', { n: c.hand.length })}</span></div>
-                {c.hand.length === 0 ? <p class="note">{t('jFromDeck')}</p> : (
-                  <div class="hand-row">{c.hand.map(h => {
-                    const on = picks[c.id]?.includes(h)
-                    return <CardFace small id={h} selected={on} onClick={() => setPicks(p => ({ ...p, [c.id]: on ? (p[c.id] ?? []).filter(x => x !== h) : [...(p[c.id] ?? []), h] }))} />
-                  })}</div>
-                )}
-              </li>
-            ))}
+            {seats.map(c => {
+              const picked = d.journeyPicks[c.id] ?? []
+              return (
+                <li class="init-pc">
+                  <div class="init-pc-h"><strong>{c.name || t('unnamed')}</strong><span class="note">{t('handCount', { n: c.hand.length })}</span></div>
+                  {c.hand.length === 0 ? <p class="note">{t('jFromDeck')}</p> : canControl(c.id) ? (
+                    <div class="hand-row">{c.hand.map(h => {
+                      const on = picked.includes(h)
+                      return <CardFace small id={h} selected={on} onClick={() => dispatch({ t: 'jPick', char: c.id, cards: on ? picked.filter(x => x !== h) : [...picked, h] })} />
+                    })}</div>
+                  ) : <p class="note">{picked.length ? t('tblPicked', { n: picked.length }) : t('tblWaiting')}</p>}
+                </li>
+              )
+            })}
+            {seats.length === 0 && <p class="note">{t(role === 'host' ? 'tblNobody' : 'noSoldiers')}</p>}
           </ul>
         </Section>
       </div>
-      <div class="col">
-        <Section id="journey-deal" titleKey="jDealTitle">
-          <div class="mini"><span class="mini-l">{t('jExtra')}</span><Stepper value={extra} min={0} max={active.length} label={t('jExtra')} onChange={setExtra} /></div>
-          <p class="note">{t('jExtraHint')}</p>
-          <div class="mini"><span class="mini-l">{t('jNarrator')}</span><Stepper value={narr} min={0} max={10} label={t('jNarrator')} onChange={setNarr} /></div>
-          <button type="button" class="btn btn-primary" disabled={active.length === 0} onClick={deal}>{t('jDeal')}</button>
-        </Section>
-      </div>
+      {narrator && (
+        <div class="col">
+          <Section id="journey-deal" titleKey="jDealTitle">
+            <div class="mini"><span class="mini-l">{t('jExtra')}</span><Stepper value={extra} min={0} max={Math.max(1, seats.length)} label={t('jExtra')} onChange={setExtra} /></div>
+            <p class="note">{t('jExtraHint')}</p>
+            <div class="mini"><span class="mini-l">{t('jNarrator')}</span><Stepper value={narr} min={0} max={10} label={t('jNarrator')} onChange={setNarr} /></div>
+            <button type="button" class="btn btn-primary" disabled={seats.length === 0} onClick={() => dispatch({ t: 'jDeal', req, avoid, extra, narr, seats: seats.map(c => c.id) })}>{t('jDeal')}</button>
+          </Section>
+        </div>
+      )}
     </div>
   )
 }

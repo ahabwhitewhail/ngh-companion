@@ -52,6 +52,13 @@
 - Лечение картой, развитие за карты с проверкой правил (красные для атрибутов, одна масть, картинки и тузы).
 - Проверка Скверны с джокерами, Инициатива для солдат и Противников, Путешествие с раздачей и темами мастей, сетка «где какая карта», журнал колоды.
 
+**Общий стол**
+- Рассказчик создаёт стол во вкладке «Стол», игроки вводят код из 6 знаков и выбирают своего солдата.
+- Одна колода у Рассказчика на всех: добор, награды, проверки Скверны, Инициатива, Путешествие.
+- Рассказчик видит отряд вживую и может ранить, лечить и награждать. Скверну и карты игрока другие игроки не видят.
+- Общая лента бросков. После перезагрузки подключение восстанавливается само.
+- Нужен интернет. Устройства соединяются напрямую (WebRTC), найти друг друга им помогают публичные Nostr-релеи; данные игры на сервере не хранятся. В некоторых мобильных сетях прямое соединение блокируется — тогда поможет Wi-Fi.
+
 Интерфейс на русском и английском, светлая и тёмная тема, размер текста. Рядом с переводом можно показывать английские термины книги.
 
 ## Что нужно знать
@@ -65,7 +72,8 @@
 - [x] Лист солдата
 - [x] Кубики и карты
 - [ ] Справочник с поиском и категориями (свои пересказы со ссылками на страницы книги)
-- [ ] Иконка приложения, резервная копия всех данных одним файлом
+- [x] Общий стол для Рассказчика
+- [ ] Резервная копия всех данных одним файлом, ссылка или QR-код на солдата
 
 Нашли ошибку или расхождение с правилами — откройте [Issue](https://github.com/ahabwhitewhail/ngh-companion/issues) с номером страницы книги.
 
@@ -81,6 +89,7 @@
 - *Soldier record:* Brawn, Smarts and Guts (current and rank), Defense, +One, Armor; 9 skills; up to 6 Whisper Paths with rituals and Corruption reminders; hideable Corruption track; weapons with damage and abilities; gear, service record, history, notes; change log with undo; autosave; recruitment check; growth costs; End Mission.
 - *+One dice:* training dice and attribute manipulations, buy dice, untrained skills, add pips, reroll, cards for +One, Whisper Path costs, modifiers, TN check with extra successes, roll history.
 - *Cards:* 54-card deck (or two decks), hand of 7, rewards, healing and growth with cards (rule-checked), Corruption draws, Initiative, Journey, deck map and log.
+- *Shared table:* the Narrator creates a table, players join with a 6-character code. One deck for everyone, held by the Narrator; live squad view with wound/heal/reward; shared roll feed; a player's Corruption and hand stay hidden from other players. Peer-to-peer over WebRTC (signaling via public Nostr relays), no server, needs internet.
 - Russian and English UI, light and dark themes, adjustable text size. Everything stays on your device.
 
 **Fan project.** Not affiliated with or endorsed by Wet Ink Games. Never Going Home and its rules, names and setting are © Wet Ink Games. You need the Never Going Home Core Rulebook (published by Wet Ink Games) to play; the app contains no rulebook text.
@@ -106,7 +115,11 @@
 - `src/cards.ts`, `src/deckOps.ts` — deck model and every card move
 - `src/dice.ts`, `src/components/Dice.tsx` — d6 and +One manipulations
 - `src/components/Sheet.tsx`, `Cards.tsx` — screens
+- `src/ops.ts` — every card/roll/Initiative/Journey action as data; one reducer for solo play and for the table
+- `src/table.ts`, `src/useTable.ts` — shared table (Trystero): Narrator as source of truth, per-seat secrecy filter
 - `src/i18n.ts`, `src/i18n-tools.ts` — Russian and English strings
+
+**Table test:** `npx vite build --mode e2e`, then `node e2e/relay.mjs`, serve `dist-e2e/` and run `node e2e/table.spec.cjs http://localhost:PORT/ shots/` — a Narrator and two players over real WebRTC with a local signaling relay.
 
 Pull requests are welcome: translations, rule fixes (cite the page), accessibility.
 

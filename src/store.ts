@@ -30,13 +30,16 @@ export interface Character {
   missions: number
   recruitCheck: boolean
   hand: string[]
+  /** Set on the Narrator's device for soldiers who belong to players at the table. */
+  remote?: { owner: string }
   history: HistoryEntry[]
   createdAt: number
   updatedAt: number
 }
 
 export interface Settings { lang: Lang; theme: 'system' | 'light' | 'dark'; textSize: number; origTerms: boolean }
-export interface DeckEvent { t: number; text: string; vars?: Record<string, string | number>; cards?: string[] }
+/** char: who it concerns; priv: cards are private to that soldier; secret: Corruption result, private to soldier and Narrator. */
+export interface DeckEvent { t: number; text: string; vars?: Record<string, string | number>; cards?: string[]; char?: string; priv?: boolean; secret?: boolean }
 export interface DeckState { decks: 1 | 2; jokers: boolean; draw: string[]; discard: string[]; table: string[]; log: DeckEvent[] }
 export interface InitEntry { id: string; kind: 'pc' | 'npc'; ref: string; name: string; card: string | null; value: number }
 export interface AppData {
@@ -46,6 +49,7 @@ export interface AppData {
   rolls: RollRecord[]
   initiative: InitEntry[]
   journey: Journey | null
+  journeyPicks: Record<string, string[]>
 }
 export interface Journey { req: string; avoid: string; dealt: { to: string; card: string; revealed: boolean }[] }
 
@@ -127,7 +131,7 @@ export function load(): AppData {
         d.settings = { ...defaultSettings(), ...d.settings }
         d.characters = d.characters.map(normalize).filter(Boolean) as Character[]
         const p = d as Partial<AppData>
-        return repairDeck({ ...d, activeId: p.activeId ?? null, rolls: p.rolls ?? [], initiative: p.initiative ?? [], journey: p.journey ?? null, deck: p.deck ?? newDeck() })
+        return repairDeck({ ...d, activeId: p.activeId ?? null, rolls: p.rolls ?? [], initiative: p.initiative ?? [], journey: p.journey ?? null, journeyPicks: p.journeyPicks ?? {}, deck: p.deck ?? newDeck() })
       }
     }
   } catch { /* storage unavailable or corrupt: start fresh */ }
@@ -135,7 +139,7 @@ export function load(): AppData {
   const deck = newDeck()
   const ex = exampleCharacter(settings.lang)
   ex.hand = deck.draw.splice(0, 4)
-  return { v: 1, characters: [ex], settings, seeded: true, activeId: ex.id, deck, rolls: [], initiative: [], journey: null }
+  return { v: 1, characters: [ex], settings, seeded: true, activeId: ex.id, deck, rolls: [], initiative: [], journey: null, journeyPicks: {} }
 }
 
 /** Every card must live in exactly one place: draw pile, discard, table or a hand. */
@@ -273,4 +277,25 @@ export function recruitTotals(c: Character) {
   const skillsTrained = SKILLS.filter(s => c.skills[s.key].trained).length + c.whispers.filter(w => w.path).length
   const dice = SKILLS.reduce((s, k) => s + c.skills[k.key].dice, 0) + c.whispers.reduce((s, w) => s + w.dice, 0)
   return { attr, skillsTrained, dice }
+}
+
+const TRACKED_ROOT = ['corruption', 'armor', 'missions']
+/** Every tracked value of a soldier as key → value (see getVal). */
+export function trackedValues(c: Character): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const a of ATTRS) { out[`attr.${a}.max`] = c.attrs[a].max; out[`attr.${a}.cur`] = c.attrs[a].cur }
+  for (const s of SKILLS) { out[`skill.${s.key}.trained`] = +c.skills[s.key].trained; out[`skill.${s.key}.dice`] = c.skills[s.key].dice }
+  for (const w of c.whispers) out[`wh.${w.id}.dice`] = w.dice
+  for (const k of TRACKED_ROOT) out[k] = getVal(c, k)!
+  return out
+}
+/** Tracked values that changed from a to b, in an order that applies cleanly (ranks before current). */
+export function diffTracked(a: Character, b: Character): [string, number][] {
+  const va = trackedValues(a), vb = trackedValues(b)
+  const keys = Object.keys(vb).filter(k => va[k] !== vb[k])
+  const rank = (k: string) => (k.endsWith('.max') || k.endsWith('.trained') ? 0 : 1)
+  return keys.sort((x, y) => rank(x) - rank(y)).map(k => [k, vb[k]] as [string, number])
+}
+export function applySets(c: Character, sets: [string, number][]): Character {
+  return sets.reduce((x, [k, v]) => setTracked(x, k, v), c)
 }

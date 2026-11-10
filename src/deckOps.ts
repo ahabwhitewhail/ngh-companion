@@ -45,7 +45,7 @@ export function drawToHand(d: AppData, charId: string, n: number, reason = 'logD
     drawn.push(r.card)
   }
   if (reshuffled) deck = pushLog(deck, { text: 'logReshuffle' })
-  if (drawn.length) deck = pushLog(deck, { text: reason, vars: { who: c.name || '—', n: drawn.length }, cards: drawn })
+  if (drawn.length) deck = pushLog(deck, { text: reason, vars: { who: c.name || '—', n: drawn.length }, cards: drawn, char: charId, priv: true })
   const out = withChar({ ...d, deck }, charId, x => ({ ...x, hand: [...x.hand, ...drawn] }))
   return { d: out, drawn, blocked: n - want, reshuffled }
 }
@@ -61,7 +61,7 @@ export function playFromHand(d: AppData, charId: string, cards: string[], reason
     const ci = info(id)
     if (ci.joker) { joker = true; if (ci.joker === 'black') blackJoker = true; deck = returnJoker(deck, id) }
   }
-  deck = pushLog(deck, { text: reason, vars: { who: nameOf(d, charId) || '—', ...vars }, cards })
+  deck = pushLog(deck, { text: reason, vars: { who: nameOf(d, charId) || '—', ...vars }, cards, char: charId })
   if (joker) deck = pushLog(deck, { text: 'logJoker' })
   const out = withChar({ ...d, deck }, charId, c => ({ ...c, hand: c.hand.filter(x => !set.has(x)) }))
   return { d: out, joker, blackJoker }
@@ -96,8 +96,8 @@ export function corruptionDraw(d: AppData, charId: string): CorruptionResult {
     const c = d.characters.find(x => x.id === charId)!
     // The card is secret: the log does not show it when the soldier hides Corruption.
     deck = pushLog(deck, c.corruptionHidden
-      ? { text: 'logCorrHidden', vars: { who: c.name || '—' } }
-      : { text: gained ? 'logCorrYes' : 'logCorrNo', vars: { who: c.name || '—' }, cards: [r.card] })
+      ? { text: 'logCorrHidden', vars: { who: c.name || '—' }, char: charId }
+      : { text: gained ? 'logCorrYes' : 'logCorrNo', vars: { who: c.name || '—' }, cards: [r.card], char: charId, secret: true })
     let out: AppData = { ...d, deck }
     if (gained) out = withChar(out, charId, x => setTracked(x, 'corruption', x.corruption + 1))
     return { d: out, card: r.card, jokers, gained }

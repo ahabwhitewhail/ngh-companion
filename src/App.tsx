@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { makeT } from './i18n'
 import { ATTRS, CORRUPTION_MAX, NATIONS } from './rules'
-import { blankCharacter, load, normalize, save, status, uid, type AppData, type Character, type Settings } from './store'
+import { blankCharacter, diffTracked, load, normalize, save, status, uid, type AppData, type Character, type Settings } from './store'
 import { Sheet } from './components/Sheet'
 import { AppCtx, useApp } from './components/ui'
 import { DiceView } from './components/Dice'
 import { CardsView } from './components/Cards'
 import { CorruptionOverlay, Tools } from './components/tools'
 import { discardHand, type CorruptionResult } from './deckOps'
+import { TableView } from './components/Table'
+import { useTable } from './useTable'
+import type { Ev } from './ops'
 
-type View = { screen: 'roster' | 'dice' | 'cards' } | { screen: 'sheet'; id: string }
+type View = { screen: 'roster' | 'dice' | 'cards' | 'table' } | { screen: 'sheet'; id: string }
 
 const VIEW_KEY = 'ngh-companion.view'
 
@@ -23,6 +26,7 @@ export function App() {
   const [panel, setPanel] = useState<null | 'settings' | 'import' | { exportOf: string }>(null)
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [corr, setCorr] = useState<(CorruptionResult & { who: string }) | null>(null)
+  const [lastCard, setLastCard] = useState<string | null>(null)
   const toastTimer = useRef<number>()
   const t = useMemo(() => makeT(data.settings.lang), [data.settings.lang])
 
@@ -31,6 +35,12 @@ export function App() {
     clearTimeout(toastTimer.current)
     toastTimer.current = window.setTimeout(() => setToastMsg(null), 3200)
   }
+  const onEvent = (e: Ev) => {
+    if (e.kind === 'toast') toast(t(e.key, e.vars))
+    else if (e.kind === 'corr') setCorr({ ...e.r, who: e.who })
+    else if (e.kind === 'card') setLastCard(e.card)
+  }
+  const tbl = useTable(data, setData, onEvent)
 
   // Autosave: debounce writes so typing stays smooth.
   const first = useRef(true)
@@ -53,8 +63,13 @@ export function App() {
   }, [data.settings])
 
   useEffect(() => { window.scrollTo(0, 0) }, [view.screen === 'sheet' ? view.id : view.screen])
-  const setActive = (id: string | null) => setData(d => ({ ...d, activeId: id }))
-  const apply = (f: (d: AppData) => AppData) => setData(f)
+  const setActive = (id: string | null) => { if (tbl.role !== 'player') setData(d => ({ ...d, activeId: id })) }
+  const editChar = (id: string, f: (c: Character) => Character) => {
+    const c = tbl.shown.characters.find(x => x.id === id)
+    if (!c) return
+    if (tbl.canControl(id)) upsert(f(c))
+    else if (tbl.role === 'host' && c.remote) { const sets = diffTracked(c, f(c)); if (sets.length) tbl.dispatch({ t: 'adjust', char: id, sets }) }
+  }
   const openSheet = (id: string) => { setActive(id); setView({ screen: 'sheet', id }) }
 
   const setSettings = (s: Partial<Settings>) => setData(d => ({ ...d, settings: { ...d.settings, ...s } }))
@@ -74,12 +89,12 @@ export function App() {
     setView({ screen: 'sheet', id: n.id })
   }
 
-  const current = view.screen === 'sheet' ? data.characters.find(c => c.id === view.id) : undefined
+  const current = view.screen === 'sheet' ? data.characters.find(c => c.id === view.id && !c.remote) : undefined
   useEffect(() => { if (view.screen === 'sheet' && !current) setView({ screen: 'roster' }) }, [current, view])
 
   return (
     <AppCtx.Provider value={{ t, settings: data.settings, toast }}>
-    <Tools.Provider value={{ d: data, apply, setActive, showCorruption: setCorr }}>
+    <Tools.Provider value={{ d: tbl.shown, dispatch: tbl.dispatch, editChar, canControl: tbl.canControl, seatIds: tbl.seatIds, role: tbl.role, lastCard, setActive }}>
       <header class="bar">
         <div class="bar-in">
           {current ? (
@@ -105,19 +120,19 @@ export function App() {
           <Sheet c={current} onChange={upsert} onDelete={() => remove(current.id)}
             onDuplicate={() => duplicate(current)} onExport={() => setPanel({ exportOf: current.id })}
             onCards={() => setView({ screen: 'cards' })} />
-        ) : view.screen === 'dice' ? <DiceView /> : view.screen === 'cards' ? <CardsView /> : (
-          <Roster chars={data.characters} onOpen={openSheet} onCreate={create} onImport={() => setPanel('import')} />
+        ) : view.screen === 'dice' ? <DiceView /> : view.screen === 'cards' ? <CardsView /> : view.screen === 'table' ? <TableView tbl={tbl} onOpenSheet={openSheet} /> : (
+          <Roster chars={data.characters.filter(c => !c.remote)} onOpen={openSheet} onCreate={create} onImport={() => setPanel('import')} atTable={tbl.role === 'player' ? tbl.me : null} />
         )}
       </main>
 
       <nav class="tabs" aria-label="Sections">
         <div class="tabs-in">
-          {([['roster', 'tabRoster', '☰'], ['dice', 'tabDice', '⚃'], ['cards', 'tabCards', '♠']] as const).map(([k, l, ic]) => {
+          {([['roster', 'tabRoster', '☰'], ['dice', 'tabDice', '⚃'], ['cards', 'tabCards', '♠'], ['table', 'tabTable', '◉']] as const).map(([k, l, ic]) => {
             const on = k === 'roster' ? view.screen === 'roster' || view.screen === 'sheet' : view.screen === k
             return (
               <button type="button" class={`tab ${on ? 'on' : ''}`} aria-current={on ? 'page' : undefined}
                 onClick={() => (k === 'roster' && view.screen !== 'roster' && view.screen !== 'sheet' && data.activeId && data.characters.some(c => c.id === data.activeId) ? openSheet(data.activeId) : setView({ screen: k }))}>
-                <span class="tab-ic" aria-hidden="true">{ic}</span>{t(l)}
+                <span class="tab-ic" aria-hidden="true">{ic}</span>{t(l)}{k === 'table' && tbl.role !== 'solo' && <i class={`tab-dot net-${tbl.status}`} aria-hidden="true" />}
               </button>
             )
           })}
@@ -143,7 +158,7 @@ export function App() {
   )
 }
 
-function Roster({ chars, onOpen, onCreate, onImport }: { chars: Character[]; onOpen: (id: string) => void; onCreate: () => void; onImport: () => void }) {
+function Roster({ chars, onOpen, onCreate, onImport, atTable }: { chars: Character[]; onOpen: (id: string) => void; onCreate: () => void; onImport: () => void; atTable: string | null }) {
   const { t } = useApp()
   return (
     <div class="roster">
@@ -167,6 +182,7 @@ function Roster({ chars, onOpen, onCreate, onImport }: { chars: Character[]; onO
                 <div class="card-top">
                   <span class="card-rank">{c.rank}</span>
                   {c.example && <span class="chip chip-example">{t('example')}</span>}
+                  {c.id === atTable && <span class="chip chip-table">{t('tblAtTableChip')}</span>}
                   <span class={`st st-${st}`}>{t(st === 'dead' ? 'statusDead' : st === 'lost' ? 'statusLost' : 'statusActive')}</span>
                 </div>
                 <span class="card-name">{c.name || t('unnamed')}</span>

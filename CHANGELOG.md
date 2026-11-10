@@ -1,3 +1,23 @@
+## v0.3.0
+
+**RU**
+- Общий стол: Рассказчик создаёт стол, игроки подключаются по коду из 6 знаков со своих устройств. Без регистрации и без сервера, устройства соединяются напрямую.
+- У Рассказчика одна колода на всех: игроки берут и играют карты из неё, проверки Скверны, Инициатива и Путешествие идут через неё.
+- Рассказчик видит отряд вживую (атрибуты, Броня, Скверна, число карт), может ранить, лечить, выдавать награды и запускать проверку Скверны.
+- Общая лента бросков.
+- Скверна и карты на руке игрока не видны другим игрокам.
+- После перезагрузки страницы или приложения подключение к столу восстанавливается само.
+
+**EN**
+- Shared table: the Narrator creates a table, players join with a 6-character code from their own devices. No account, no server; devices connect directly.
+- One deck for the whole table, held by the Narrator: draws, plays, Corruption draws, Initiative and Journey all go through it.
+- The Narrator sees the squad live (attributes, Armor, Corruption, card count) and can wound, heal, reward and call Corruption draws.
+- Shared roll feed.
+- A player's Corruption and hand stay hidden from the other players.
+- The table connection comes back by itself after a reload.
+
+Downloads: `NGH-Companion.apk` (Android), `NGH-Companion-Windows.zip` (Windows 10/11). Browser: https://ahabwhitewhail.github.io/ngh-companion/
+
 ## v0.2.1
 
 **RU**

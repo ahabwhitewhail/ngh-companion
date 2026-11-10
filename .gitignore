@@ -9,3 +9,4 @@ desktop/dist
 desktop/out
 desktop/.tmp
 dist-pages
+dist-e2e

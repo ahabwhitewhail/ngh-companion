@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'preact/hooks'
 import { info } from '../cards'
-import { corruptionDraw, playFromHand, revealTop } from '../deckOps'
 import { countSuccesses, d6, rollN, type RollRecord } from '../dice'
 import { PATHS, SKILLS, pathOf, type AttrKey } from '../rules'
 import { setTracked, uid, type AppData } from '../store'
 import { Section, Stepper, Term, useApp } from './ui'
 import { CardFace, Die, SoldierPicker, useTools } from './tools'
 
-const ROLL_LIMIT = 40
 
 interface RollState {
   phase: 'setup' | 'rolled'
@@ -60,8 +58,8 @@ export function DiceView() {
 
 function SkillRoll() {
   const { t, toast } = useApp()
-  const { d, apply, showCorruption } = useTools()
-  const c = d.characters.find(x => x.id === d.activeId) ?? null
+  const { d, dispatch, editChar, canControl } = useTools()
+  const c = d.characters.find(x => x.id === d.activeId && canControl(x.id)) ?? null
   const [src, setSrc] = useState('skill:athletics')
   const [s, setS] = useState<RollState>(fresh)
   const [cardPick, setCardPick] = useState<null | 'plusOne' | 'whisper'>(null)
@@ -108,11 +106,7 @@ function SkillRoll() {
       id: s.recId, t: Date.now(), who: c?.name ?? '', what: label, whatKind: kind, faces: s.faces, auto: auto + s.modSucc,
       successes: total, tn: s.tn > 0 ? s.tn : null, manips: used, cards: s.cards,
     }
-    apply(dd => {
-      const i = dd.rolls.findIndex(r => r.id === rec.id)
-      const rolls = i >= 0 ? dd.rolls.map(r => (r.id === rec.id ? { ...rec, t: r.t } : r)) : [...dd.rolls, rec].slice(-ROLL_LIMIT)
-      return { ...dd, rolls }
-    })
+    dispatch({ t: 'rollPut', rec })
   }, [s.phase, s.faces.join(), total, used, s.tn])
 
   const doRoll = () => {
@@ -148,36 +142,18 @@ function SkillRoll() {
   /** Spend a card from the hand: +One, or a Whisper's automatic success. */
   const spendCard = (card: string, why: 'plusOne' | 'whisper') => {
     if (!c) return
-    apply(dd => {
-      const res = playFromHand(dd, c.id, [card], why === 'plusOne' ? 'logPlusOne' : 'logWhisperCost')
-      let out = res.d
-      if (res.blackJoker) {
-        const r = corruptionDraw(out, c.id)
-        out = r.d
-        setTimeout(() => showCorruption({ ...r, who: c.name || t('unnamed') }), 0)
-      }
-      return out
-    })
+    dispatch({ t: 'play', char: c.id, cards: [card], reason: why === 'plusOne' ? 'logPlusOne' : 'logWhisperCost' })
     if (why === 'plusOne') upd({ cards: s.cards + 1 }); else upd({ auto: s.auto + 1 })
     setCardPick(null)
-    if (info(card).joker) toast(t('logJoker'))
   }
   const discardFromDeck = () => {
     if (!c) return
-    apply(dd => {
-      const r = revealTop(dd, 'logWhisperCost', { who: c.name || '—' })
-      if (r.card && !info(r.card).red) {
-        const cr = corruptionDraw(r.d, c.id)
-        setTimeout(() => { toast(t('blackFromDeck')); showCorruption({ ...cr, who: c.name || t('unnamed') }) }, 0)
-        return cr.d
-      }
-      return r.d
-    })
+    dispatch({ t: 'whisperDeck', char: c.id })
     upd({ auto: s.auto + 1 })
   }
   const bleed = (a: AttrKey) => {
     if (!c || c.attrs[a].cur <= 0) return
-    apply(dd => ({ ...dd, characters: dd.characters.map(x => (x.id === c.id ? setTracked(x, `attr.${a}.cur`, x.attrs[a].cur - 1) : x)) }))
+    editChar(c.id, x => setTracked(x, `attr.${a}.cur`, x.attrs[a].cur - 1))
     upd({ auto: s.auto + 1 })
   }
 
@@ -350,7 +326,7 @@ function WhisperCost({ pathKey, c, auto, source, healFull, onBleed, onSource, on
 
 function FreeRoll() {
   const { t } = useApp()
-  const { d, apply } = useTools()
+  const { d, dispatch } = useTools()
   const [n, setN] = useState(1)
   const [faces, setFaces] = useState<number[]>([])
   const [k, setK] = useState(0)
@@ -359,7 +335,7 @@ function FreeRoll() {
     setFaces(f); setK(k + 1)
     const who = d.characters.find(c => c.id === d.activeId)?.name ?? ''
     const rec: RollRecord = { id: uid(), t: Date.now(), who, what: `${count}d6`, whatKind: 'plain', faces: f, auto: 0, successes: countSuccesses(f), tn: null, manips: 0, cards: 0 }
-    apply(dd => ({ ...dd, rolls: [...dd.rolls, rec].slice(-ROLL_LIMIT) }))
+    dispatch({ t: 'rollPut', rec })
   }
   return (
     <Section id="free" titleKey="diceFree">
@@ -383,10 +359,10 @@ function FreeRoll() {
 
 function RollHistory() {
   const { t, settings } = useApp()
-  const { d, apply } = useTools()
+  const { d, dispatch, role } = useTools()
   const list = [...d.rolls].reverse()
   return (
-    <Section id="rolls" titleKey="rollHistory" aside={list.length > 0 && <button type="button" class="btn btn-ghost btn-sm" onClick={() => apply(dd => ({ ...dd, rolls: [] }))}>{t('clear')}</button>}>
+    <Section id="rolls" titleKey="rollHistory" aside={list.length > 0 && role !== 'player' && <button type="button" class="btn btn-ghost btn-sm" onClick={() => dispatch({ t: 'rollsClear' })}>{t('clear')}</button>}>
       {list.length === 0 && <p class="note">{t('noRolls')}</p>}
       <ol class="rolls">
         {list.map(r => {

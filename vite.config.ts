@@ -11,6 +11,8 @@ export default defineConfig(({ mode }) => {
   const pages = mode === 'pages'
   return {
     base: pages ? '/ngh-companion/' : './',
+    // e2e: local signaling relay for the two-browser table test (see e2e/)
+    resolve: mode === 'e2e' ? { alias: { trystero: '/e2e/trystero-shim.ts' } } : undefined,
     plugins: [
       preact(),
       ...(mode === 'single' ? [viteSingleFile()] : []),
@@ -41,7 +43,7 @@ export default defineConfig(({ mode }) => {
         : []),
     ],
     build: {
-      outDir: mode === 'single' ? 'dist-single' : pages ? 'dist-pages' : 'dist',
+      outDir: mode === 'single' ? 'dist-single' : pages ? 'dist-pages' : mode === 'e2e' ? 'dist-e2e' : 'dist',
       assetsInlineLimit: mode === 'single' ? 100_000_000 : 4096,
     },
   }
