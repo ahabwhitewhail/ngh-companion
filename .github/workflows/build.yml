@@ -27,13 +27,33 @@ jobs:
       - run: npm run build
 
       - name: Android APK
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           npx cap add android
           npx cap sync android
+          # Every build gets a higher versionCode so Android accepts it as an update.
+          VERSION=$(node -p "require('./package.json').version")
+          sed -i -E "s/versionCode [0-9]+/versionCode ${{ github.run_number }}/; s/versionName \"[^\"]*\"/versionName \"$VERSION\"/" android/app/build.gradle
           chmod +x android/gradlew
-          (cd android && ./gradlew assembleDebug)
           mkdir -p release
-          cp android/app/build/outputs/apk/debug/app-debug.apk release/NGH-Companion.apk
+          if [ -n "$KEYSTORE_B64" ]; then
+            # Signed with the project's permanent key: new versions install over old ones and keep the data.
+            (cd android && ./gradlew assembleRelease)
+            BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/ngh.p12"
+            "$BT/zipalign" -f -p 4 android/app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/aligned.apk"
+            "$BT/apksigner" sign --ks "$RUNNER_TEMP/ngh.p12" --ks-type PKCS12 --ks-key-alias ngh \
+              --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEYSTORE_PASSWORD \
+              --out release/NGH-Companion.apk "$RUNNER_TEMP/aligned.apk"
+            "$BT/apksigner" verify --print-certs release/NGH-Companion.apk | head -3
+            rm -f "$RUNNER_TEMP/ngh.p12"
+          else
+            # No signing key (forks, pull requests): a debug build for testing only.
+            (cd android && ./gradlew assembleDebug)
+            cp android/app/build/outputs/apk/debug/app-debug.apk release/NGH-Companion.apk
+          fi
 
       - name: Windows app
         run: |
