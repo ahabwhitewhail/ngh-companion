@@ -575,3 +575,18 @@ button.pcard { cursor: pointer; }
 .ref-form { display: grid; gap: 12px; max-width: 72ch; }
 .peek .ref-body { font-size: .95rem; }
 .peek .eyebrow { margin-top: -6px; }
+/* Antagonists */
+.foe-add { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-bottom: 10px; }
+.foe-add .fld { flex: 1 1 220px; }
+.foes { margin-top: 12px; }
+.foe .seat-h .x { margin-left: auto; }
+.foe.is-dead { opacity: .6; }
+.foe.is-dead strong { text-decoration: line-through; }
+.foe .tn { padding: 0 8px; }
+.qr { background: #fff; padding: 10px; width: min(260px, 100%); border: 1px solid var(--rule); border-radius: 2px; justify-self: center; }
+.qr svg { display: block; width: 100%; height: auto; }
+.backup { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--rule); }
+.backup .sub { margin: 4px 0 0; }
+.foe .seat-h { flex-wrap: nowrap; align-items: center; }
+.foe .seat-h strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.foe .seat-h .chip, .foe .seat-h .mini-l { flex: none; }

@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { makeT } from './i18n'
 import { ATTRS, CORRUPTION_MAX, NATIONS } from './rules'
-import { blankCharacter, diffTracked, load, normalize, save, status, uid, type AppData, type Character, type Settings } from './store'
+import { blankCharacter, diffTracked, fromBackup, load, normalize, save, status, uid, type AppData, type Character, type Settings } from './store'
 import { Sheet } from './components/Sheet'
-import { AppCtx, useApp } from './components/ui'
+import { AppCtx, ConfirmButton, useApp } from './components/ui'
 import { DiceView } from './components/Dice'
 import { CardsView } from './components/Cards'
 import { CorruptionOverlay, Tools } from './components/tools'
 import { discardHand, type CorruptionResult } from './deckOps'
 import { TableView } from './components/Table'
 import { ReferenceView, RefPeek } from './components/Reference'
+import { Foes } from './components/Foes'
 import { useTable } from './useTable'
+import qrcode from 'qrcode-generator'
+import { soldierLink, soldierToken, tokenFrom, tokenToSoldier } from './share'
 import type { Ev } from './ops'
 
 type View = { screen: 'roster' | 'dice' | 'cards' | 'table' | 'ref' } | { screen: 'sheet'; id: string }
@@ -25,6 +28,14 @@ export function App() {
   })
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'failed'>('saved')
   const [panel, setPanel] = useState<null | 'settings' | 'import' | { exportOf: string }>(null)
+  const [incoming, setIncoming] = useState<Character | null>(null)
+  // A shared soldier link (#s=…) opens straight into the import dialog.
+  useEffect(() => {
+    const tok = tokenFrom(location.hash)
+    if (!tok) return
+    try { history.replaceState(null, '', location.pathname + location.search) } catch { /* ignore */ }
+    void tokenToSoldier(tok).then(c => { if (c) { setIncoming(c); setPanel('import') } })
+  }, [])
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [corr, setCorr] = useState<(CorruptionResult & { who: string }) | null>(null)
   const [lastCard, setLastCard] = useState<string | null>(null)
@@ -123,7 +134,7 @@ export function App() {
           <Sheet c={current} onChange={upsert} onDelete={() => remove(current.id)}
             onDuplicate={() => duplicate(current)} onExport={() => setPanel({ exportOf: current.id })}
             onCards={() => setView({ screen: 'cards' })} />
-        ) : view.screen === 'dice' ? <DiceView /> : view.screen === 'cards' ? <CardsView /> : view.screen === 'table' ? <TableView tbl={tbl} onOpenSheet={openSheet} /> : view.screen === 'ref' ? <ReferenceView data={data} setData={setData} openId={refEntry} setOpenId={setRefEntry} /> : (
+        ) : view.screen === 'dice' ? <DiceView /> : view.screen === 'cards' ? <CardsView /> : view.screen === 'table' ? <TableView tbl={tbl} onOpenSheet={openSheet} foes={<Foes data={data} setData={setData} />} /> : view.screen === 'ref' ? <ReferenceView data={data} setData={setData} openId={refEntry} setOpenId={setRefEntry} /> : (
           <Roster chars={data.characters.filter(c => !c.remote)} onOpen={openSheet} onCreate={create} onImport={() => setPanel('import')} atTable={tbl.role === 'player' ? tbl.me : null} />
         )}
       </main>
@@ -142,9 +153,11 @@ export function App() {
         </div>
       </nav>
 
-      {panel === 'settings' && <SettingsPanel s={data.settings} set={setSettings} onClose={() => setPanel(null)} />}
+      {panel === 'settings' && <SettingsPanel s={data.settings} set={setSettings} onClose={() => setPanel(null)} data={data}
+        onRestore={d => { setData(() => d); setPanel(null); setView({ screen: 'roster' }); toast(t('backupRestored')) }} />}
       {panel === 'import' && (
-        <ImportPanel onClose={() => setPanel(null)} onImport={c => {
+        <ImportPanel initial={incoming} onClose={() => { setPanel(null); setIncoming(null) }} onImport={c => {
+          setIncoming(null)
           const n = { ...c, id: uid(), example: false, hand: [] }
           setData(d => ({ ...d, characters: [n, ...d.characters], activeId: n.id }))
           setPanel(null); toast(t('imported')); setView({ screen: 'sheet', id: n.id })
@@ -242,7 +255,7 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   )
 }
 
-function SettingsPanel({ s, set, onClose }: { s: Settings; set: (s: Partial<Settings>) => void; onClose: () => void }) {
+function SettingsPanel({ s, set, onClose, data, onRestore }: { s: Settings; set: (s: Partial<Settings>) => void; onClose: () => void; data: AppData; onRestore: (d: AppData) => void }) {
   const { t } = useApp()
   const seg = <V extends string | number>(id: string, val: V, opts: [V, string][], on: (v: V) => void) => (
     <div class="seg" role="radiogroup" aria-labelledby={id}>
@@ -262,6 +275,7 @@ function SettingsPanel({ s, set, onClose }: { s: Settings; set: (s: Partial<Sett
         <span><span class="lbl">{t('origTerms')}</span><span class="desc">{t('origTermsHint')}</span></span>
       </label>
       <p class="note">{t('dataNote')}</p>
+      <Backup data={data} onRestore={onRestore} />
     </Modal>
   )
 }
@@ -271,29 +285,54 @@ function ExportPanel({ c, onClose }: { c: Character; onClose: () => void }) {
   const json = JSON.stringify(c, null, 2)
   const ref = useRef<HTMLTextAreaElement>(null)
   const [failed, setFailed] = useState(false)
-  const copy = () => {
+  const [link, setLink] = useState('')
+  useEffect(() => { void soldierToken(c).then(tok => setLink(soldierLink(tok))) }, [c.id])
+  const qr = useMemo(() => {
+    if (!link) return ''
+    try { const q = qrcode(0, 'L'); q.addData(link); q.make(); return q.createSvgTag({ cellSize: 3, margin: 3, scalable: true }) } catch { return '' }
+  }, [link])
+  const copyText = (text: string, el?: HTMLTextAreaElement | null) => {
     try {
-      navigator.clipboard.writeText(json).then(() => toast(t('copied')), () => { setFailed(true); ref.current?.select() })
-    } catch { setFailed(true); ref.current?.select() }
+      navigator.clipboard.writeText(text).then(() => toast(t('copied')), () => { setFailed(true); el?.select() })
+    } catch { setFailed(true); el?.select() }
   }
   return (
-    <Modal title={t('exportJson')} onClose={onClose}>
+    <Modal title={t('shareTitle')} onClose={onClose}>
       <p class="note">{c.name || t('unnamed')}</p>
-      <textarea id="export-json" ref={ref} class="txt mono json" readOnly value={json} rows={10} onFocus={e => (e.target as HTMLTextAreaElement).select()} />
+      <h3 class="sub">{t('shareLink')}</h3>
+      <p class="note">{t('shareLinkHint')}</p>
+      {qr ? <div class="qr" role="img" aria-label={t('shareQr')} dangerouslySetInnerHTML={{ __html: qr }} /> : <p class="note">{link ? t('shareTooBig') : '…'}</p>}
+      <div class="modal-actions">
+        <button type="button" class="btn btn-primary" disabled={!link} onClick={() => copyText(link)}>{t('shareCopyLink')}</button>
+      </div>
+      <h3 class="sub">JSON</h3>
+      <textarea id="export-json" ref={ref} class="txt mono json" readOnly value={json} rows={6} onFocus={e => (e.target as HTMLTextAreaElement).select()} />
       {failed && <p class="note note-stamp">{t('copyFailed')}</p>}
-      <div class="modal-actions"><button type="button" class="btn btn-primary" onClick={copy}>{t('exportJson')}</button></div>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" onClick={() => copyText(json, ref.current)}>{t('exportJson')}</button></div>
     </Modal>
   )
 }
 
-function ImportPanel({ onClose, onImport }: { onClose: () => void; onImport: (c: Character) => void }) {
+function ImportPanel({ onClose, onImport, initial }: { onClose: () => void; onImport: (c: Character) => void; initial?: Character | null }) {
   const { t } = useApp()
   const [text, setText] = useState('')
   const [err, setErr] = useState(false)
-  const tryImport = (raw: string) => {
+  const tryImport = async (raw: string) => {
+    const tok = tokenFrom(raw)
+    if (tok) { const c = await tokenToSoldier(tok); if (c) { onImport(c); return } }
     try { const c = normalize(JSON.parse(raw)); if (c) { onImport(c); return } } catch { /* fallthrough */ }
     setErr(true)
   }
+  if (initial) return (
+    <Modal title={t('importJson')} onClose={onClose}>
+      <p class="lead">{t('shareIncoming', { name: initial.name || t('unnamed') })}</p>
+      <p class="note">{[initial.rank, initial.unit].filter(Boolean).join(' · ')}</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" onClick={onClose}>{t('cancel')}</button>
+        <button type="button" class="btn btn-primary" onClick={() => onImport(initial)}>{t('importDo')}</button>
+      </div>
+    </Modal>
+  )
   return (
     <Modal title={t('importJson')} onClose={onClose}>
       <p class="note">{t('importHint')}</p>
@@ -302,11 +341,57 @@ function ImportPanel({ onClose, onImport }: { onClose: () => void; onImport: (c:
       <div class="modal-actions">
         <label class="btn btn-ghost" for="import-file">{t('chooseFile')}
           <input id="import-file" type="file" accept=".json,application/json" class="sr-only"
-            onChange={async e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) tryImport(await f.text()) }} />
+            onChange={async e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) void tryImport(await f.text()) }} />
         </label>
-        <button type="button" class="btn btn-primary" disabled={!text.trim()} onClick={() => tryImport(text)}>{t('importDo')}</button>
+        <button type="button" class="btn btn-primary" disabled={!text.trim()} onClick={() => void tryImport(text)}>{t('importDo')}</button>
       </div>
     </Modal>
   )
 }
 
+
+/** Everything in one file: soldiers, deck, notes, settings. */
+function Backup({ data, onRestore }: { data: AppData; onRestore: (d: AppData) => void }) {
+  const { t, toast } = useApp()
+  const [pending, setPending] = useState<AppData | null>(null)
+  const [err, setErr] = useState(false)
+  const [text, setText] = useState('')
+  const json = () => JSON.stringify({ ...data, backupAt: new Date().toISOString() })
+  const stamp = new Date().toISOString().slice(0, 10)
+  const download = () => {
+    try {
+      const url = URL.createObjectURL(new Blob([json()], { type: 'application/json' }))
+      const a = document.createElement('a'); a.href = url; a.download = `ngh-backup-${stamp}.json`
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000)
+    } catch { toast(t('backupNoDownload')) }
+  }
+  const copy = () => { try { navigator.clipboard.writeText(json()).then(() => toast(t('copied')), () => toast(t('copyFailed'))) } catch { toast(t('copyFailed')) } }
+  const check = (raw: string) => { const d = fromBackup(raw); setErr(!d); setPending(d) }
+  return (
+    <div class="backup">
+      <h3 class="sub">{t('backupTitle')}</h3>
+      <p class="note">{t('backupHint', { n: data.characters.filter(c => !c.remote).length })}</p>
+      <div class="after">
+        <button type="button" class="btn btn-ghost btn-sm" onClick={download}>{t('backupSave')}</button>
+        <button type="button" class="btn btn-ghost btn-sm" onClick={copy}>{t('backupCopy')}</button>
+      </div>
+      <h3 class="sub">{t('backupRestore')}</h3>
+      <div class="after">
+        <label class="btn btn-ghost btn-sm" for="backup-file">{t('chooseFile')}
+          <input id="backup-file" type="file" accept=".json,application/json" class="sr-only"
+            onChange={async e => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) check(await f.text()) }} />
+        </label>
+      </div>
+      <textarea id="backup-paste" class="txt mono json" rows={3} placeholder={t('backupPastePh')} value={text}
+        onInput={e => { const v = (e.target as HTMLTextAreaElement).value; setText(v); if (v.trim()) check(v); else { setPending(null); setErr(false) } }} />
+      {err && <p class="note note-stamp">{t('backupBad')}</p>}
+      {pending && (
+        <div class="sub-panel">
+          <p class="note">{t('backupFound', { n: pending.characters.length })}</p>
+          <p class="note note-stamp">{t('backupWarn')}</p>
+          <ConfirmButton label={t('backupReplace')} confirmLabel={t('confirmDelete')} onConfirm={() => onRestore(pending)} />
+        </div>
+      )}
+    </div>
+  )
+}

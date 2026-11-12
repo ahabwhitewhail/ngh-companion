@@ -6,7 +6,7 @@ import type { TableApi } from '../useTable'
 import { ConfirmButton, Section, Stepper, useApp } from './ui'
 import { useTools } from './tools'
 
-export function TableView({ tbl, onOpenSheet }: { tbl: TableApi; onOpenSheet: (id: string) => void }) {
+export function TableView({ tbl, onOpenSheet, foes }: { tbl: TableApi; onOpenSheet: (id: string) => void; foes: preact.ComponentChildren }) {
   const { t } = useApp()
   return (
     <div class="tool">
@@ -21,6 +21,7 @@ export function TableView({ tbl, onOpenSheet }: { tbl: TableApi; onOpenSheet: (i
       {tbl.role === 'solo' && <Start tbl={tbl} />}
       {tbl.role === 'host' && <Host tbl={tbl} />}
       {tbl.role === 'player' && <Player tbl={tbl} onOpenSheet={onOpenSheet} />}
+      {tbl.role !== 'player' && foes}
     </div>
   )
 }

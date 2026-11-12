@@ -27,6 +27,7 @@
     "@fontsource/pt-mono": "^5.1.0",
     "@fontsource/pt-serif": "^5.1.0",
     "preact": "^10.25.0",
+    "qrcode-generator": "^1.4.4",
     "trystero": "^0.25.4"
   },
   "private": true,

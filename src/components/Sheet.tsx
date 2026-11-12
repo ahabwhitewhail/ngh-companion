@@ -113,7 +113,7 @@ export function Sheet({ c, onChange, onDelete, onDuplicate, onExport, onCards }:
       </div>
 
       <footer class="sheet-foot">
-        <button type="button" class="btn btn-ghost" onClick={onExport}>{t('exportJson')}</button>
+        <button type="button" class="btn btn-ghost" onClick={onExport}>{t('shareTitle')}</button>
         <button type="button" class="btn btn-ghost" onClick={onDuplicate}>{t('duplicate')}</button>
         <ConfirmButton label={t('deleteSoldier')} confirmLabel={t('confirmDelete')} onConfirm={onDelete} />
       </footer>
