@@ -1,3 +1,21 @@
+## v0.5.0
+
+**RU**
+- Противники для Рассказчика (вкладка «Стол»): 19 противников из книги или свои, урон и лечение, Броня, оглушение, награда при уничтожении, отправка в Инициативу группами.
+- Резервная копия всего приложения в файл или буфер обмена и восстановление (Настройки).
+- Поделиться солдатом ссылкой или QR-кодом: ссылка открывает импорт в браузерной версии, в приложении её можно вставить в «Импорт».
+- Лист: панель разделов под полоской атрибутов; на телефоне навыки и Шёпот идут сразу после атрибутов.
+- Быстрее первый запуск: сетевой модуль, справочник и QR загружаются только при использовании; убраны неиспользуемые шрифты.
+
+**EN**
+- Antagonists for the Narrator (Table tab): 19 from the book or your own, wound and heal, Armor, stun, reward on defeat, send groups to Initiative.
+- Back up the whole app to a file or clipboard and restore it (Settings).
+- Share a soldier as a link or QR code: the link opens an import in the browser version; in the app, paste it into Import.
+- Sheet: section bar under the attribute strip; on phones skills and Whispers follow the attributes.
+- Faster start: network code, the reference and QR load only when used; unused font files removed.
+
+Downloads: `NGH-Companion.apk` (Android), `NGH-Companion-Windows.zip` (Windows 10/11). Browser: https://ahabwhitewhail.github.io/ngh-companion/
+
 ## v0.4.0
 
 **RU**

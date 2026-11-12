@@ -590,3 +590,18 @@ button.pcard { cursor: pointer; }
 .foe .seat-h { flex-wrap: nowrap; align-items: center; }
 .foe .seat-h strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .foe .seat-h .chip, .foe .seat-h .mini-l { flex: none; }
+
+/* Sheet: sticky head (vitals + section bar) and phone ordering */
+.sticky-head { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 53px); z-index: 10; margin-bottom: 18px; }
+.sticky-head .vitals { position: static; margin-bottom: 0; border-radius: 2px 2px 0 0; }
+.sheet-nav { display: flex; gap: 2px; overflow-x: auto; background: var(--paper); border: 1px solid var(--ink); border-top: 0; padding: 4px; scrollbar-width: none; }
+.sheet-nav::-webkit-scrollbar { display: none; }
+.sheet-nav a { flex: none; padding: 6px 10px; font-family: var(--f-mono); font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); text-decoration: none; border-radius: 2px; white-space: nowrap; }
+.sheet-nav a.on { background: var(--ink); color: var(--paper); }
+.sheet .sect, .sheet .mission { scroll-margin-top: calc(var(--stick-h, 160px) + 64px); }
+@media (max-width: 899px) {
+  .sheet .cols { display: flex; flex-direction: column; gap: 16px; }
+  .sheet .col { display: contents; }
+  #recruitment { order: 1 } #corruption { order: 2 } #training { order: 3 } #whispers { order: 4 }
+  #equipment { order: 5 } #mission { order: 6 } #service { order: 7 } #history { order: 8 } #notes { order: 9 } #log { order: 10 }
+}

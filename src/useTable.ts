@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { applyOp, HOST_ONLY, type Ev, type Op } from './ops'
 import { blankCharacter, diffTracked, applySets, normalize, repairDeck, status, type AppData, type Character } from './store'
-import { normalizeCode, newCode, TableHost, TablePlayer, type Seat, type TableView } from './table'
+import { normalizeCode, newCode } from './tableCode'
+import type { Seat, TableHost, TablePlayer, TableView } from './table'
 
 export type Role = 'solo' | 'host' | 'player'
 interface Session { role: Role; code: string; charId?: string; narrator?: string }
@@ -149,6 +150,7 @@ export function useTable(data: AppData, setData: (f: (d: AppData) => AppData) =>
 
   // ---- connect / reconnect for the saved session ----
   useEffect(() => {
+    let cancelled = false
     hostRef.current?.close(); hostRef.current = null
     playerRef.current?.close(); playerRef.current = null
     charPeer.current.clear(); peerChar.current.clear(); refreshOnline()
@@ -167,6 +169,8 @@ export function useTable(data: AppData, setData: (f: (d: AppData) => AppData) =>
         })
         refreshOnline()
       }
+      // The network code (WebRTC, signaling) loads only when a table is actually used.
+      void import('./table').then(({ TableHost }) => { if (cancelled) return
       hostRef.current = new TableHost(session.code, session.narrator || '', {
         onHello: upsertRemote,
         onChar: (peer, c) => { if (peerChar.current.get(peer) === c.id) upsertRemote(peer, c) },
@@ -184,8 +188,11 @@ export function useTable(data: AppData, setData: (f: (d: AppData) => AppData) =>
           if (id) { charPeer.current.delete(id); peerChar.current.delete(peer); refreshOnline() }
         },
       })
+      })
     } else if (session.role === 'player' && session.charId) {
       const me = session.charId
+      setStatus('searching')
+      void import('./table').then(({ TablePlayer }) => { if (cancelled) return
       playerRef.current = new TablePlayer(session.code, () => dataRef.current.characters.find(c => c.id === me) ?? null, {
         onStatus: setStatus,
         onView: v => {
@@ -195,8 +202,9 @@ export function useTable(data: AppData, setData: (f: (d: AppData) => AppData) =>
         onEv: e => evRef.current(e),
         onSets: (char, sets) => { if (char === me) setData(d => ({ ...d, characters: d.characters.map(c => (c.id === me ? applySets(c, sets) : c)) })) },
       })
+      })
     } else setStatus('off')
-    return () => { hostRef.current?.close(); playerRef.current?.close() }
+    return () => { cancelled = true; hostRef.current?.close(); hostRef.current = null; playerRef.current?.close(); playerRef.current = null }
   }, [session.role, session.code, session.charId])
 
   const shown = useMemo(() => (session.role === 'player' && view && session.charId ? overlay(data, view, session.charId) : data), [data, view, session])

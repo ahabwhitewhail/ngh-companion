@@ -1,5 +1,10 @@
 // Strings for Stage 2: dice and cards.
 export const en2: Record<string, string> = {
+  navAttrs: 'Attributes',
+  navSkills: 'Skills',
+  navGear: 'Gear',
+  navNotes: 'Records',
+  navLog: 'Log',
   shareTitle: 'Share soldier',
   shareLink: 'Link and QR code',
   shareLinkHint: 'Whoever opens the link or scans the code gets a copy of this soldier in their browser version. In the app, paste the link into Import.',
@@ -280,6 +285,11 @@ export const en2: Record<string, string> = {
 }
 
 export const ru2: Record<string, string> = {
+  navAttrs: 'Атрибуты',
+  navSkills: 'Навыки',
+  navGear: 'Снаряжение',
+  navNotes: 'Записи',
+  navLog: 'Журнал',
   shareTitle: 'Поделиться солдатом',
   shareLink: 'Ссылка и QR-код',
   shareLinkHint: 'Кто откроет ссылку или наведёт камеру на код, получит копию солдата в браузерной версии. В приложении вставьте ссылку в «Импорт».',

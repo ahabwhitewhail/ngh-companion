@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks'
 import { ATTRS, CORRUPTION_MAX, HAND_MAX } from '../rules'
 import { status, type Character } from '../store'
-import { normalizeCode } from '../table'
+import { normalizeCode } from '../tableCode'
 import type { TableApi } from '../useTable'
 import { ConfirmButton, Section, Stepper, useApp } from './ui'
 import { useTools } from './tools'

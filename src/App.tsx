@@ -9,10 +9,9 @@ import { CardsView } from './components/Cards'
 import { CorruptionOverlay, Tools } from './components/tools'
 import { discardHand, type CorruptionResult } from './deckOps'
 import { TableView } from './components/Table'
-import { ReferenceView, RefPeek } from './components/Reference'
+type RefModule = typeof import('./components/Reference')
 import { Foes } from './components/Foes'
 import { useTable } from './useTable'
-import qrcode from 'qrcode-generator'
 import { soldierLink, soldierToken, tokenFrom, tokenToSoldier } from './share'
 import type { Ev } from './ops'
 
@@ -41,6 +40,9 @@ export function App() {
   const [lastCard, setLastCard] = useState<string | null>(null)
   const [peek, setPeek] = useState<string | null>(null)
   const [refEntry, setRefEntry] = useState<string | null>(null)
+  // The rules text loads the first time the reference or an "i" button is used.
+  const [refMod, setRefMod] = useState<RefModule | null>(null)
+  useEffect(() => { if (!refMod && (peek || view.screen === 'ref')) void import('./components/Reference').then(setRefMod) }, [peek, view.screen])
   const toastTimer = useRef<number>()
   const t = useMemo(() => makeT(data.settings.lang), [data.settings.lang])
 
@@ -134,7 +136,7 @@ export function App() {
           <Sheet c={current} onChange={upsert} onDelete={() => remove(current.id)}
             onDuplicate={() => duplicate(current)} onExport={() => setPanel({ exportOf: current.id })}
             onCards={() => setView({ screen: 'cards' })} />
-        ) : view.screen === 'dice' ? <DiceView /> : view.screen === 'cards' ? <CardsView /> : view.screen === 'table' ? <TableView tbl={tbl} onOpenSheet={openSheet} foes={<Foes data={data} setData={setData} />} /> : view.screen === 'ref' ? <ReferenceView data={data} setData={setData} openId={refEntry} setOpenId={setRefEntry} /> : (
+        ) : view.screen === 'dice' ? <DiceView /> : view.screen === 'cards' ? <CardsView /> : view.screen === 'table' ? <TableView tbl={tbl} onOpenSheet={openSheet} foes={<Foes data={data} setData={setData} />} /> : view.screen === 'ref' ? (refMod ? <refMod.ReferenceView data={data} setData={setData} openId={refEntry} setOpenId={setRefEntry} /> : <p class="note">…</p>) : (
           <Roster chars={data.characters.filter(c => !c.remote)} onOpen={openSheet} onCreate={create} onImport={() => setPanel('import')} atTable={tbl.role === 'player' ? tbl.me : null} />
         )}
       </main>
@@ -167,7 +169,7 @@ export function App() {
         <ExportPanel c={data.characters.find(x => x.id === panel.exportOf)!} onClose={() => setPanel(null)} />
       )}
 
-      {peek && <RefPeek id={peek} custom={data.refCustom} onClose={() => setPeek(null)} onOpenFull={() => { setRefEntry(peek); setPeek(null); setView({ screen: 'ref' }) }} />}
+      {peek && refMod && <refMod.RefPeek id={peek} custom={data.refCustom} onClose={() => setPeek(null)} onOpenFull={() => { setRefEntry(peek); setPeek(null); setView({ screen: 'ref' }) }} />}
       {corr && <CorruptionOverlay r={corr} onClose={() => setCorr(null)} />}
       {toastMsg && <div class="toast" role="status">{toastMsg}</div>}
     </Tools.Provider>
@@ -287,9 +289,12 @@ function ExportPanel({ c, onClose }: { c: Character; onClose: () => void }) {
   const [failed, setFailed] = useState(false)
   const [link, setLink] = useState('')
   useEffect(() => { void soldierToken(c).then(tok => setLink(soldierLink(tok))) }, [c.id])
-  const qr = useMemo(() => {
-    if (!link) return ''
-    try { const q = qrcode(0, 'L'); q.addData(link); q.make(); return q.createSvgTag({ cellSize: 3, margin: 3, scalable: true }) } catch { return '' }
+  const [qr, setQr] = useState('')
+  useEffect(() => {
+    if (!link) return
+    void import('qrcode-generator').then(({ default: qrcode }) => {
+      try { const q = qrcode(0, 'L'); q.addData(link); q.make(); setQr(q.createSvgTag({ cellSize: 3, margin: 3, scalable: true })) } catch { setQr('') }
+    })
   }, [link])
   const copyText = (text: string, el?: HTMLTextAreaElement | null) => {
     try {

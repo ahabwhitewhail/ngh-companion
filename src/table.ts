@@ -5,17 +5,9 @@ import { joinRoom, type Room } from 'trystero'
 import type { Ev, Op } from './ops'
 import type { RollRecord } from './dice'
 import type { Character, DeckEvent, InitEntry, Journey } from './store'
+export { newCode, normalizeCode } from './tableCode'
 
 const APP_ID = 'ngh-companion-table-v1'
-const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
-
-export function newCode(): string {
-  const buf = new Uint32Array(6)
-  crypto.getRandomValues(buf)
-  return Array.from(buf, x => CODE_ALPHABET[x % CODE_ALPHABET.length]).join('')
-}
-export const normalizeCode = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)
-
 /** What one seat at the table looks like to the other players. */
 export interface Seat {
   id: string; name: string; rank: string; missions: number

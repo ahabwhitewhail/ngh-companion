@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks'
+import { useEffect, useRef, useState } from 'preact/hooks'
 import {
   ATTRS, ATTR_TRACK, CORRUPTION_MAX, CREATION, NATIONS, PATHS, SKILLS, SKILL_MAX, WEAPONS,
   WHISPER_CORRUPTION_PIPS, cost, fistDamage, pathOf, weaponOf, type AttrKey,
@@ -22,7 +22,7 @@ export function Sheet({ c, onChange, onDelete, onDuplicate, onExport, onCards }:
 
   return (
     <div class="sheet">
-      <Vitals c={c} set={set} onCards={onCards} />
+      <StickyHead><Vitals c={c} set={set} onCards={onCards} /><SheetNav /></StickyHead>
 
       {st === 'dead' && (
         <div class="banner banner-stamp" role="status">
@@ -420,7 +420,7 @@ function Equipment({ c, field }: { c: Character; field: <K extends keyof Charact
 function MissionEnd({ c, onChange }: { c: Character; onChange: Upd }) {
   const { t, toast } = useApp()
   return (
-    <div class="mission">
+    <div class="mission" id="mission">
       <div>
         <strong>{t('missionEnd')}</strong> <InfoBtn id="mission" label={t('missionEnd')} />
         <p class="note">{t('missionEndHint')}</p>
@@ -482,3 +482,46 @@ function ChangeLog({ c, onChange }: { c: Character; onChange: Upd }) {
   )
 }
 
+
+const NAV: [string, string][] = [
+  ['recruitment', 'navAttrs'], ['corruption', 'corruption'], ['training', 'navSkills'], ['whispers', 'whispers'],
+  ['equipment', 'navGear'], ['service', 'navNotes'], ['log', 'navLog'],
+]
+
+/** Keeps the vitals strip and the section bar together at the top; publishes their height for scroll offsets. */
+function StickyHead({ children }: { children: preact.ComponentChildren }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => document.documentElement.style.setProperty('--stick-h', `${el.offsetHeight}px`))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  return <div class="sticky-head" ref={ref}>{children}</div>
+}
+
+/** Jump between sheet sections; the current one is highlighted while scrolling. */
+function SheetNav() {
+  const { t } = useApp()
+  const [active, setActive] = useState('recruitment')
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(entries => {
+      const vis = entries.filter(e => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0]
+      if (vis) setActive(vis.target.id)
+    }, { rootMargin: '-35% 0px -55% 0px' })
+    NAV.forEach(([id]) => { const el = document.getElementById(id); if (el) io.observe(el) })
+    return () => io.disconnect()
+  }, [])
+  return (
+    <nav class="sheet-nav" aria-label={t('soldierRecord')}>
+      {NAV.map(([id, key]) => (
+        <a href={`#${id}`} class={active === id ? 'on' : ''} aria-current={active === id ? 'location' : undefined}
+          onClick={e => { e.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); setActive(id) }}>
+          {t(key)}
+        </a>
+      ))}
+    </nav>
+  )
+}
