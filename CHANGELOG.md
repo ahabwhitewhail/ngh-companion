@@ -1,3 +1,15 @@
+## v0.5.1
+
+**RU**
+- Первая версия APK, подписанная постоянным ключом проекта. Все следующие версии будут устанавливаться поверх неё с сохранением данных.
+- Если у вас стоит более ранний APK: сохраните данные (Настройки → Резервная копия), удалите старое приложение, установите это и восстановите копию. Это нужно сделать один раз.
+
+**EN**
+- First APK signed with the project’s permanent key. Every later version installs over it and keeps your data.
+- If you have an earlier APK: back up (Settings → Backup), uninstall the old app, install this one and restore. This is needed only once.
+
+Downloads: `NGH-Companion.apk` (Android), `NGH-Companion-Windows.zip` (Windows 10/11). Browser: https://ahabwhitewhail.github.io/ngh-companion/
+
 ## v0.5.0
 
 **RU**
