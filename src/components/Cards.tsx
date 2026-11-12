@@ -3,7 +3,7 @@ import { info, RANKS, SUITS, SUIT_SYMBOL, SUIT_THEME, buildDeck, growthCheck, va
 import { where } from '../deckOps'
 import { ATTRS, CREATION, HAND_MAX, SKILLS, SKILL_MAX, pathOf, type AttrKey } from '../rules'
 import { diffTracked, setTracked, status, type AppData, type Character } from '../store'
-import { ConfirmButton, Section, Stepper, useApp } from './ui'
+import { ConfirmButton, InfoBtn, Section, Stepper, useApp } from './ui'
 import { CardFace, SoldierPicker, useTools } from './tools'
 
 type Sub = 'hand' | 'deck' | 'init' | 'journey'
@@ -55,7 +55,7 @@ function HandView() {
   return (
     <div class="tool-cols">
       <div class="col">
-        <Section id="hand" titleKey="cHand" aside={<span class="count-pill">{t('handCount', { n: c.hand.length })}</span>}>
+        <Section id="hand" titleKey="cHand" aside={<><span class="count-pill">{t('handCount', { n: c.hand.length })}</span><InfoBtn id="card-uses" label={t('cHand')} /></>}>
           <SoldierPicker id="hand-soldier" />
           {c.hand.length === 0 ? <p class="note">{t('noCards')}</p> : <p class="note">{t('selectHint')}</p>}
           <div class="hand">
@@ -99,7 +99,7 @@ function HandView() {
           </div>
           <p class="note">{t('rewardHint')}</p>
         </Section>
-        <Section id="hand-corr" titleKey="corruption" class="sect-corr">
+        <Section id="hand-corr" titleKey="corruption" class="sect-corr" aside={<InfoBtn id="corruption-draw" label={t('corrDraw')} />}>
           <p class="note">{t('corruptionHint')}</p>
           <button type="button" class="btn btn-ghost" onClick={() => dispatch({ t: 'corruption', char: c.id })}>{t('corrDraw')}</button>
         </Section>
@@ -148,7 +148,7 @@ function Growth({ c, sel, onBuy }: { c: Character; sel: string[]; onBuy: (keep: 
   }
   return (
     <div class="sub-panel">
-      <p class="note">{t('growthOnlyEnd')}</p>
+      <p class="note">{t('growthOnlyEnd')} <InfoBtn id="growth" label={t('growth')} /></p>
       <label class="fld" for="growth-opt"><span class="fld-l">{t('growthTarget')}</span>
         <select id="growth-opt" value={o.id} onChange={e => setOpt((e.target as HTMLSelectElement).value)}>
           {options.map(x => <option value={x.id}>{x.label}</option>)}
@@ -322,7 +322,7 @@ function InitiativeView() {
         )}
       </div>
       <div class="col">
-        <Section id="init-order" titleKey="initTitle" aside={narrator && entries.length > 0 && <button type="button" class="btn btn-ghost btn-sm" onClick={() => dispatch({ t: 'initClear' })}>{t('initClear')}</button>}>
+        <Section id="init-order" titleKey="initTitle" aside={<>{narrator && entries.length > 0 && <button type="button" class="btn btn-ghost btn-sm" onClick={() => dispatch({ t: 'initClear' })}>{t('initClear')}</button>}<InfoBtn id="initiative" label={t('cInit')} /></>}>
           <p class="note">{t('initHint')}</p>
           {order.length === 0 && <p class="note">{t('initEmpty')}</p>}
           <ol class="init-order">
@@ -367,7 +367,7 @@ function JourneyView() {
     return (
       <div class="tool-cols">
         <div class="col">
-          <Section id="journey" titleKey="jTitle">
+          <Section id="journey" titleKey="jTitle" aside={<InfoBtn id="journey" label={t('jTitle')} />}>
             {(j.req || j.avoid) && <p class="j-req">{j.req && <><b>{t('jReq')}:</b> {j.req}</>}{j.avoid && <><br /><b>{t('jAvoid')}:</b> {j.avoid}</>}</p>}
             <p class="note">{t('jTheme')}</p>
             <ul class="j-dealt">
@@ -411,7 +411,7 @@ function JourneyView() {
   return (
     <div class="tool-cols">
       <div class="col">
-        <Section id="journey" titleKey="jTitle">
+        <Section id="journey" titleKey="jTitle" aside={<InfoBtn id="journey" label={t('jTitle')} />}>
           {narrator && (
             <div class="id-grid">
               <label class="fld" for="j-req"><span class="fld-l">{t('jReq')}</span><input id="j-req" value={req} placeholder={t('jReqPh')} onInput={e => setReq((e.target as HTMLInputElement).value)} /></label>

@@ -1,3 +1,19 @@
+## v0.4.0
+
+**RU**
+- Справочник по правилам (вкладка «Правила»): 12 разделов по ТЗ — основные правила, создание персонажа, навыки, броски, бой, урон, Скверна, Шёпот и все 36 ритуалов, оружие, состояния, 19 Противников, термины. Пересказ своими словами с номерами страниц книги.
+- Поиск на русском и английском, разделы, свои записи и личные заметки к любой статье.
+- Кнопки «i» на листе, у кубиков и карт открывают нужную статью прямо поверх экрана.
+- APK теперь подписывается постоянным ключом: следующие версии ставятся поверх и сохраняют данные. Переход на него требует один раз удалить старую версию — сначала сохраните солдат через «Скопировать JSON».
+
+**EN**
+- Rules reference (Rules tab): core rules, character creation, skills, rolls, combat, damage, Corruption, Whispers and all 36 rituals, weapons, conditions, 19 Antagonists, glossary. Summaries in our own words with rulebook page numbers.
+- Search in Russian and English, categories, your own entries and personal notes on any entry.
+- “i” buttons on the sheet, dice and cards open the relevant entry over the current screen.
+- The APK is now signed with a permanent key, so future versions install over old ones and keep data. Switching requires uninstalling the old version once — export your soldiers first.
+
+Downloads: `NGH-Companion.apk` (Android), `NGH-Companion-Windows.zip` (Windows 10/11). Browser: https://ahabwhitewhail.github.io/ngh-companion/
+
 ## v0.3.0
 
 **RU**

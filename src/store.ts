@@ -50,7 +50,11 @@ export interface AppData {
   initiative: InitEntry[]
   journey: Journey | null
   journeyPicks: Record<string, string[]>
+  /** Personal notes on built-in reference entries, and the user's own entries. */
+  refNotes: Record<string, string>
+  refCustom: CustomRef[]
 }
+export interface CustomRef { id: string; cat: string; title: string; body: string; updatedAt: number }
 export interface Journey { req: string; avoid: string; dealt: { to: string; card: string; revealed: boolean }[] }
 
 export function newDeck(decks: 1 | 2 = 1, jokers = true): DeckState {
@@ -131,7 +135,7 @@ export function load(): AppData {
         d.settings = { ...defaultSettings(), ...d.settings }
         d.characters = d.characters.map(normalize).filter(Boolean) as Character[]
         const p = d as Partial<AppData>
-        return repairDeck({ ...d, activeId: p.activeId ?? null, rolls: p.rolls ?? [], initiative: p.initiative ?? [], journey: p.journey ?? null, journeyPicks: p.journeyPicks ?? {}, deck: p.deck ?? newDeck() })
+        return repairDeck({ ...d, activeId: p.activeId ?? null, rolls: p.rolls ?? [], initiative: p.initiative ?? [], journey: p.journey ?? null, journeyPicks: p.journeyPicks ?? {}, refNotes: p.refNotes ?? {}, refCustom: p.refCustom ?? [], deck: p.deck ?? newDeck() })
       }
     }
   } catch { /* storage unavailable or corrupt: start fresh */ }
@@ -139,7 +143,7 @@ export function load(): AppData {
   const deck = newDeck()
   const ex = exampleCharacter(settings.lang)
   ex.hand = deck.draw.splice(0, 4)
-  return { v: 1, characters: [ex], settings, seeded: true, activeId: ex.id, deck, rolls: [], initiative: [], journey: null, journeyPicks: {} }
+  return { v: 1, characters: [ex], settings, seeded: true, activeId: ex.id, deck, rolls: [], initiative: [], journey: null, journeyPicks: {}, refNotes: {}, refCustom: [] }
 }
 
 /** Every card must live in exactly one place: draw pile, discard, table or a hand. */

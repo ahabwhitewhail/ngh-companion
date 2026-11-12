@@ -3,7 +3,7 @@ import { useContext, useEffect, useRef, useState } from 'preact/hooks'
 import { orig, type T } from '../i18n'
 import type { Settings } from '../store'
 
-export interface Ctx { t: T; settings: Settings; toast: (msg: string) => void }
+export interface Ctx { t: T; settings: Settings; toast: (msg: string) => void; openRef: (id: string) => void }
 export const AppCtx = createContext<Ctx>(null as unknown as Ctx)
 export const useApp = () => useContext(AppCtx)
 
@@ -100,4 +100,10 @@ export function ConfirmButton({ label, confirmLabel, onConfirm, class: cls }: {
       {armed ? confirmLabel : label}
     </button>
   )
+}
+
+/** Small "i" that opens a reference entry over the current screen. */
+export function InfoBtn({ id, label }: { id: string; label?: string }) {
+  const { t, openRef } = useApp()
+  return <button type="button" class="info" aria-label={`${t('refOpen')}: ${label ?? id}`} onClick={e => { e.stopPropagation(); openRef(id) }}>i</button>
 }

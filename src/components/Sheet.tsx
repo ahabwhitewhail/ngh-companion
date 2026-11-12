@@ -7,7 +7,7 @@ import {
   endMission, isUndoable, recruitTotals, setTracked, status, uid, undoLast,
   type Character, type HistoryEntry,
 } from '../store'
-import { AutoText, ConfirmButton, Pips, Section, Stepper, Term, useApp } from './ui'
+import { AutoText, ConfirmButton, InfoBtn, Pips, Section, Stepper, Term, useApp } from './ui'
 
 type Upd = (c: Character) => void
 
@@ -71,14 +71,14 @@ export function Sheet({ c, onChange, onDelete, onDuplicate, onExport, onCards }:
       <div class="cols">
         <div class="col">
           <Section id="recruitment" titleKey="recruitment"
-            aside={<button type="button" class={`btn btn-ghost btn-sm ${showCosts ? 'is-on' : ''}`} aria-pressed={showCosts} onClick={() => setShowCosts(!showCosts)}>{t('growthTitle')}</button>}>
+            aside={<><button type="button" class={`btn btn-ghost btn-sm ${showCosts ? 'is-on' : ''}`} aria-pressed={showCosts} onClick={() => setShowCosts(!showCosts)}>{t('growthTitle')}</button><InfoBtn id="attributes" label={t('recruitment')} /></>}>
             {showCosts && <p class="note">{t('growthNote')}</p>}
             <div class="attrs">
               {ATTRS.map(a => <AttrBlock key={a} c={c} a={a} set={set} showCosts={showCosts} />)}
             </div>
             <div class="armor-row">
               <div>
-                <Term k="armor" class="lbl" />
+                <Term k="armor" class="lbl" /> <InfoBtn id="armor" label={t('armor')} />
                 <p class="note">{t('armorHint')}</p>
               </div>
               <Stepper value={c.armor} label={t('armor')} onChange={v => set('armor', v)} />
@@ -219,7 +219,7 @@ function Corruption({ c, set, onToggleHidden }: { c: Character; set: (k: string,
   const msg = c.corruption >= 5 ? t('corruption5') : c.corruption === 4 ? t('corruption4') : c.corruption === 3 ? t('corruption3') : ''
   return (
     <Section id="corruption" titleKey="corruption" class="sect-corr"
-      aside={<button type="button" class="btn btn-ghost btn-sm" aria-pressed={c.corruptionHidden} onClick={onToggleHidden}>{c.corruptionHidden ? t('show') : t('hide')}</button>}>
+      aside={<><button type="button" class="btn btn-ghost btn-sm" aria-pressed={c.corruptionHidden} onClick={onToggleHidden}>{c.corruptionHidden ? t('show') : t('hide')}</button><InfoBtn id="corruption-levels" label={t('corruption')} /></>}>
       {c.corruptionHidden ? (
         <p class="corr-veil">{t('hidden')}</p>
       ) : (
@@ -245,7 +245,7 @@ function Training({ c, set, showCosts, onCosts }: { c: Character; set: (k: strin
   const extra = Math.max(0, trainedCount - CREATION.trainedSkills)
   return (
     <Section id="training" titleKey="training"
-      aside={<button type="button" class={`btn btn-ghost btn-sm ${showCosts ? 'is-on' : ''}`} aria-pressed={showCosts} onClick={onCosts}>{t('growthTitle')}</button>}>
+      aside={<><button type="button" class={`btn btn-ghost btn-sm ${showCosts ? 'is-on' : ''}`} aria-pressed={showCosts} onClick={onCosts}>{t('growthTitle')}</button><InfoBtn id="plusone" label="+One" /></>}>
       <ul class="skills">
         {SKILLS.map(s => {
           const sk = c.skills[s.key]
@@ -256,7 +256,7 @@ function Training({ c, set, showCosts, onCosts }: { c: Character; set: (k: strin
                 <input id={`sk-${s.key}`} type="checkbox" class="box" checked={sk.trained}
                   onChange={e => set(`skill.${s.key}.trained`, (e.target as HTMLInputElement).checked ? 1 : 0)} />
                 <span>
-                  <Term k={s.key} class="lbl" />
+                  <Term k={s.key} class="lbl" /> <InfoBtn id={`skill-${s.key}`} label={t(s.key)} />
                   <span class="desc"><span class={`attr-tag tag-${s.attr}`}>{t(s.attr)}</span> {t(`${s.key}Desc`)}</span>
                 </span>
               </label>
@@ -286,7 +286,7 @@ function Whispers({ c, onChange, set, showCosts }: { c: Character; onChange: Upd
   const remove = (id: string) => onChange({ ...c, whispers: c.whispers.filter(w => w.id !== id), updatedAt: Date.now() })
 
   return (
-    <Section id="whispers" titleKey="whispers">
+    <Section id="whispers" titleKey="whispers" aside={<InfoBtn id="casting" label={t('whispers')} />}>
       {c.whispers.length === 0 && <p class="note">{t('choosePath')}: {PATHS.map(p => t(p.key)).join(', ')}.</p>}
       <div class="whispers">
         {c.whispers.map(w => {
@@ -306,6 +306,7 @@ function Whispers({ c, onChange, set, showCosts }: { c: Character; onChange: Upd
                   </select>
                 </label>
                 {p && <span class={`attr-tag tag-${p.attr}`}>{t(p.attr)}</span>}
+                {p && <InfoBtn id={`path-${p.key}`} label={t(p.key)} />}
               </div>
               <div class="skill-dice">
                 <Pips size="sm" value={w.dice} max={SKILL_MAX} label={`${t('whisper')} · ${t('skillDice')}`}
@@ -331,6 +332,9 @@ function Whispers({ c, onChange, set, showCosts }: { c: Character; onChange: Upd
                       )
                     })}
                   </div>
+                  {w.rituals.length > 0 && (
+                    <ul class="known">{w.rituals.map(r => <li><Term k={r} /> <InfoBtn id={`ritual-${r}`} label={t(r)} /></li>)}</ul>
+                  )}
                 </fieldset>
               )}
               <div class="wh-foot">
@@ -363,7 +367,7 @@ function Equipment({ c, field }: { c: Character; field: <K extends keyof Charact
     field('weapons', [...c.weapons, { id: uid(), type, name: '' }])
   }
   return (
-    <Section id="equipment" titleKey="equipment">
+    <Section id="equipment" titleKey="equipment" aside={<InfoBtn id="weapons" label={t('weapons')} />}>
       <h3 class="sub"><Term k="weapons" /></h3>
       <ul class="weapons">
         {rows.map(r => (
@@ -418,7 +422,7 @@ function MissionEnd({ c, onChange }: { c: Character; onChange: Upd }) {
   return (
     <div class="mission">
       <div>
-        <strong>{t('missionEnd')}</strong>
+        <strong>{t('missionEnd')}</strong> <InfoBtn id="mission" label={t('missionEnd')} />
         <p class="note">{t('missionEndHint')}</p>
       </div>
       <ConfirmButton label={t('missionEnd')} confirmLabel={t('confirmDelete')}

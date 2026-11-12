@@ -3,7 +3,7 @@ import { info } from '../cards'
 import { countSuccesses, d6, rollN, type RollRecord } from '../dice'
 import { PATHS, SKILLS, pathOf, type AttrKey } from '../rules'
 import { setTracked, uid, type AppData } from '../store'
-import { Section, Stepper, Term, useApp } from './ui'
+import { InfoBtn, Section, Stepper, Term, useApp } from './ui'
 import { CardFace, Die, SoldierPicker, useTools } from './tools'
 
 
@@ -203,7 +203,7 @@ function SkillRoll() {
 
         {s.phase === 'setup' && (
           <div class="phase">
-            <h3 class="sub">{t('beforeRoll')}</h3>
+            <h3 class="sub">{t('beforeRoll')} <InfoBtn id="plusone" label="+One" /></h3>
             {needTemp && (
               <div class="row-note">
                 <p class="note">{t('tempSkillNeeded')}</p>
@@ -296,7 +296,7 @@ function WhisperCost({ pathKey, c, auto, source, healFull, onBleed, onSource, on
   if (!c) return null
   return (
     <div class="wcost">
-      <h3 class="sub"><Term k={pathKey} /> · {t('pathCost')}{auto > 0 && <span class="wcost-n"> · +{auto}</span>}</h3>
+      <h3 class="sub"><Term k={pathKey} /> <InfoBtn id={`path-${pathKey}`} label={t(pathKey)} /> · {t('pathCost')}{auto > 0 && <span class="wcost-n"> · +{auto}</span>}</h3>
       <p class="note">{t('whisperPlan')}</p>
       {pathKey === 'bloodRites' && <><p class="note">{t('bloodCost')}</p>
         <button type="button" class="btn btn-ghost btn-sm" disabled={c.attrs.brawn.cur <= 1} onClick={() => onBleed('brawn')}>{t('bleed', { a: t('brawn') })}</button></>}

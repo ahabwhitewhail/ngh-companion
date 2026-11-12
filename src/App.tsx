@@ -9,10 +9,11 @@ import { CardsView } from './components/Cards'
 import { CorruptionOverlay, Tools } from './components/tools'
 import { discardHand, type CorruptionResult } from './deckOps'
 import { TableView } from './components/Table'
+import { ReferenceView, RefPeek } from './components/Reference'
 import { useTable } from './useTable'
 import type { Ev } from './ops'
 
-type View = { screen: 'roster' | 'dice' | 'cards' | 'table' } | { screen: 'sheet'; id: string }
+type View = { screen: 'roster' | 'dice' | 'cards' | 'table' | 'ref' } | { screen: 'sheet'; id: string }
 
 const VIEW_KEY = 'ngh-companion.view'
 
@@ -27,6 +28,8 @@ export function App() {
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const [corr, setCorr] = useState<(CorruptionResult & { who: string }) | null>(null)
   const [lastCard, setLastCard] = useState<string | null>(null)
+  const [peek, setPeek] = useState<string | null>(null)
+  const [refEntry, setRefEntry] = useState<string | null>(null)
   const toastTimer = useRef<number>()
   const t = useMemo(() => makeT(data.settings.lang), [data.settings.lang])
 
@@ -93,7 +96,7 @@ export function App() {
   useEffect(() => { if (view.screen === 'sheet' && !current) setView({ screen: 'roster' }) }, [current, view])
 
   return (
-    <AppCtx.Provider value={{ t, settings: data.settings, toast }}>
+    <AppCtx.Provider value={{ t, settings: data.settings, toast, openRef: setPeek }}>
     <Tools.Provider value={{ d: tbl.shown, dispatch: tbl.dispatch, editChar, canControl: tbl.canControl, seatIds: tbl.seatIds, role: tbl.role, lastCard, setActive }}>
       <header class="bar">
         <div class="bar-in">
@@ -120,14 +123,14 @@ export function App() {
           <Sheet c={current} onChange={upsert} onDelete={() => remove(current.id)}
             onDuplicate={() => duplicate(current)} onExport={() => setPanel({ exportOf: current.id })}
             onCards={() => setView({ screen: 'cards' })} />
-        ) : view.screen === 'dice' ? <DiceView /> : view.screen === 'cards' ? <CardsView /> : view.screen === 'table' ? <TableView tbl={tbl} onOpenSheet={openSheet} /> : (
+        ) : view.screen === 'dice' ? <DiceView /> : view.screen === 'cards' ? <CardsView /> : view.screen === 'table' ? <TableView tbl={tbl} onOpenSheet={openSheet} /> : view.screen === 'ref' ? <ReferenceView data={data} setData={setData} openId={refEntry} setOpenId={setRefEntry} /> : (
           <Roster chars={data.characters.filter(c => !c.remote)} onOpen={openSheet} onCreate={create} onImport={() => setPanel('import')} atTable={tbl.role === 'player' ? tbl.me : null} />
         )}
       </main>
 
       <nav class="tabs" aria-label="Sections">
         <div class="tabs-in">
-          {([['roster', 'tabRoster', '☰'], ['dice', 'tabDice', '⚃'], ['cards', 'tabCards', '♠'], ['table', 'tabTable', '◉']] as const).map(([k, l, ic]) => {
+          {([['roster', 'tabRoster', '☰'], ['dice', 'tabDice', '⚃'], ['cards', 'tabCards', '♠'], ['table', 'tabTable', '◉'], ['ref', 'tabRef', '§']] as const).map(([k, l, ic]) => {
             const on = k === 'roster' ? view.screen === 'roster' || view.screen === 'sheet' : view.screen === k
             return (
               <button type="button" class={`tab ${on ? 'on' : ''}`} aria-current={on ? 'page' : undefined}
@@ -151,6 +154,7 @@ export function App() {
         <ExportPanel c={data.characters.find(x => x.id === panel.exportOf)!} onClose={() => setPanel(null)} />
       )}
 
+      {peek && <RefPeek id={peek} custom={data.refCustom} onClose={() => setPeek(null)} onOpenFull={() => { setRefEntry(peek); setPeek(null); setView({ screen: 'ref' }) }} />}
       {corr && <CorruptionOverlay r={corr} onClose={() => setCorr(null)} />}
       {toastMsg && <div class="toast" role="status">{toastMsg}</div>}
     </Tools.Provider>
